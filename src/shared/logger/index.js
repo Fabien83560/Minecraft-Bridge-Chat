@@ -1,11 +1,12 @@
 const Logger = require('./logger');
-const config = require('../../../config');
+const Config = require('../../../config');
 
 let loggerInstance = null;
 
 function getLogger() {
 	if (!loggerInstance) {
-		const loggingConfig = config.getLoggingConfig();
+		let config = new Config();
+		const loggingConfig = config.get("features.logging");
 		loggerInstance = new Logger(loggingConfig);
 	}
 	return loggerInstance;

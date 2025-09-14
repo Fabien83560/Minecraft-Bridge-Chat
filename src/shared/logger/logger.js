@@ -15,21 +15,23 @@ class Logger {
         this.levels = {
             debug: 0,
             info: 1,
+            perf: 1,
             warn: 2,
-            error: 3
+            error: 3,
         };
         
         this.currentLevel = this.levels[this.config.level] || 1;
         
         // Colors for console
         this.colors = {
-            debug: '\x1b[36m', // Cyan
-            info: '\x1b[32m',  // Green
-            warn: '\x1b[33m',  // Yellow
-            error: '\x1b[31m', // Red
-            minecraft: '\x1b[35m', // Magenta
-            discord: '\x1b[34m',   // Blue
-            bridge: '\x1b[96m',    // Light cyan
+            debug: '\x1b[36m',          // Cyan
+            info: '\x1b[32m',           // Green
+            warn: '\x1b[33m',           // Yellow
+            error: '\x1b[31m',          // Red
+            minecraft: '\x1b[35m',      // Magenta
+            discord: '\x1b[34m',        // Blue
+            bridge: '\x1b[96m',         // Light cyan
+            perf: '\x1b[95;1m',  // Violet électrique (unique)
             reset: '\x1b[0m'
         };
         
@@ -41,7 +43,8 @@ class Logger {
             error: '❌',
             minecraft: '🎮',
             discord: '💬',
-            bridge: '🌉'
+            bridge: '🌉',
+            perf: '⚡'
         };
         
         // Initialize file logger if needed
@@ -93,7 +96,7 @@ class Logger {
         }
         
         const timestamp = this.getTimestamp();
-        const levelString = level.toUpperCase().padEnd(9);
+        const levelString = level.toUpperCase().padEnd(13);
         const emoji = this.emojis[level] || '';
         
         // Build message
@@ -122,7 +125,7 @@ class Logger {
             return String(arg);
         }).join(' ');
         
-        return `[${timestamp}] ${emoji} ${level} ${formattedArgs}`;
+        return `[${timestamp}] ${emoji}  ${level} ${formattedArgs}`;
     }
     
     logToConsole(level, message) {
@@ -172,9 +175,12 @@ class Logger {
     
     logPerformance(label, startTime) {
         const duration = Date.now() - startTime;
-        this.debug(`Performance [${label}]:`, `${duration}ms`);
+        const message = `${label}: ${duration}ms`;
+
+        // Appel direct au log principal avec le type 'perf'
+        this.log('perf', message);
     }
-    
+
     // Method for Minecraft connections
     logMinecraftConnection(guildId, username, status, details = {}) {
         const message = `[${guildId}] ${username} - ${status}`;

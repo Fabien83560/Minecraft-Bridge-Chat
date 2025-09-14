@@ -45,6 +45,16 @@ class Config {
 
         return current;
     }
+
+    // Guild Management
+
+    getAllGuilds() {
+        return this.get('guilds', []);
+    }
+
+    getEnabledGuilds() {
+        return this.getAllGuilds().filter(guild => guild.enabled);
+    }
 }
 
 module.exports = Config;

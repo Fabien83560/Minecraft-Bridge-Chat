@@ -4,27 +4,29 @@ const path = require('path');
 
 // Specific Imports
 const logger = require('./shared/logger');
-const Config = require("../config/index.js")
+const Config = require("../config/index.js");
+const MinecraftManager = require('./minecraft/index.js');
+const BridgeLocator = require("./bridgeLocator.js");
 
 class MainBridge {
     constructor() {
-        logger.info("=====================================")
-        logger.info("======= Initialize MainBridge =======")
-        logger.info("=====================================")
-
         this._startTime = Date.now();
         this._isRunning = false;
 
         this.config = new Config();
+        this._minecraftManager = null;
     }
 
     async start() {
-        logger.info("=====================================")
-        logger.info("====== 🚀 Starting Application ======")
-        logger.info("=====================================")
+        logger.info("===========================================");
+        logger.info("========= 🚀 Starting Application =========");
+        logger.info("===========================================");
 
         // Step 1 : Initialize core systems
         await this.initializeCoreSystems();
+
+        // Step 2 : Initialize Minecraft Module
+        await this.initializeMinecraftModule();
     }
 
     async stop() {
@@ -32,9 +34,9 @@ class MainBridge {
     }
 
     async initializeCoreSystems() {
-        logger.info("=====================================")
-        logger.info("=== ⚙️  Initializing core systems  ===");
-        logger.info("=====================================")
+        logger.info("===========================================");
+        logger.info("====== ⚙️  Initializing core systems  ======");
+        logger.info("===========================================");
 
         const stepStartTime = Date.now();
         
@@ -88,6 +90,36 @@ class MainBridge {
         } catch (error) {
             logger.logError(error, 'Core systems initialization failed');
             throw new Error(`Core systems initialization failed: ${error.message}`);
+        }
+    }
+
+    async initializeMinecraftModule() {
+        logger.info("===========================================");
+        logger.info("==== 🎮  Initializing Minecraft Module ====");
+        logger.info("===========================================");
+
+        const stepStartTime = Date.now();
+        try {
+            this._minecraftManager = new MinecraftManager(this);
+            await this._minecraftManager.start();
+            
+            this._minecraftManager.onConnection((connectionData) => {
+                if (connectionData.type === 'connected') {
+                    logger.logMinecraftConnection(connectionData.guildId, connectionData.username, 'connected');
+                } else if (connectionData.type === 'disconnected') {
+                    logger.logMinecraftConnection(connectionData.guildId, connectionData.username, 'disconnected', { reason: connectionData.reason });
+                }
+            });
+            
+            this._minecraftManager.onError((error, guildId) => {
+                logger.logError(error, `Minecraft connection error for guild: ${guildId}`);
+            });
+
+            logger.logPerformance('Minecraft module initialization', stepStartTime);
+            logger.minecraft('✅ Minecraft module initialized');
+        } catch (error) {
+            logger.logError(error, 'Minecraft module initialization failed');
+            throw new Error(`Minecraft module initialization failed: ${error.message}`);
         }
     }
 
@@ -154,12 +186,13 @@ class MainBridge {
     }
 }
 
-let instance = null;
+let mainInstance = null;
 
 async function main() {
     try {
-        instance = new MainBridge();
-        await instance.start();
+        mainInstance = new MainBridge();
+        BridgeLocator.setInstance(mainInstance);
+        await mainInstance.start();
     } catch (error) {
         logger.logError(error, 'Main function execution failed');
         process.exit(1);
@@ -180,8 +213,8 @@ process.on('SIGTERM', async () => {
 async function handleShutdown(signal) {
     try {
         logger.debug(`Processing ${signal} signal`);
-        if (bridgeInstance) {
-            await bridgeInstance.stop();
+        if (mainInstance) {
+            await mainInstance.stop();
         }
         logger.info('🏁 Process exiting cleanly');
         process.exit(0);
@@ -208,3 +241,5 @@ process.on('unhandledRejection', (reason, promise) => {
 if (require.main === module) {
     main();
 }
+
+module.exports = MainBridge;

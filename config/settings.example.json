@@ -1,0 +1,288 @@
+{
+    "app": {
+        "name": "Minecraft-Bridge-Chat",
+        "version": "1.0.0",
+        "token": "YOUR_DISCORD_BOT_TOKEN",
+        "clientId": "YOUR_BOT_CLIENT_ID",
+        "serverDiscordId": "YOUR_DISCORD_SERVER_ID"
+    },
+    "guilds": [
+        {
+            "name": "FrenchLegacy",
+            "tag": "[V1]",
+            "id": "fl1guild",
+            "enabled": true,
+            "server": {
+                "serverName": "Hypixel",
+                "host": "mc.hypixel.net",
+                "port": 25565,
+                "version": "1.8.9"
+            },
+            "account": {
+                "username": "bot_username",
+                "email": "bot_email",
+                "id": "fl1bot",
+                "authMethod": "microsoft",
+                "viewDistance": "tiny",
+                "chatLengthLimit": 256,
+                "keepAlive": true,
+                "sessionPath": "./data/auth-cache",
+                "cachePath": "./data/auth-cache",
+                "profilesFolder": "./data/auth-cache",
+                "cache": true,
+                "reconnection": {
+                    "enabled": true,
+                    "maxRetries": 5,
+                    "retryDelay": 30000,
+                    "exponentialBackoff": true
+                }
+            },
+            "commands": {
+                "prefix": "/g",
+                "allowedCommands": ["gc", "oc", "invite", "kick", "promote", "demote"],
+                "cooldown": 5000
+            }
+        },
+        {
+            "name": "FrenchLegacyII",
+            "tag": "[V2]",
+            "id": "fl2guild",
+            "enabled": true,
+            "server": {
+                "serverName": "Hypixel",
+                "host": "mc.hypixel.net",
+                "port": 25565,
+                "version": "1.8.9"
+            },
+            "account": {
+                "username": "bot_username",
+                "email": "bot_email",
+                "id": "fl2bot",
+                "authMethod": "microsoft",
+                "viewDistance": "tiny",
+                "chatLengthLimit": 256,
+                "keepAlive": true,
+                "sessionPath": "./data/auth-cache",
+                "cachePath": "./data/auth-cache",
+                "profilesFolder": "./data/auth-cache",
+                "cache": true,
+                "reconnection": {
+                    "enabled": true,
+                    "maxRetries": 5,
+                    "retryDelay": 30000,
+                    "exponentialBackoff": true
+                }
+            },
+            "commands": {
+                "prefix": "/g",
+                "allowedCommands": ["gc", "oc", "invite", "kick", "promote", "demote"],
+                "cooldown": 5000
+            }
+        }
+    ],
+    "bridge": {
+        "channels": {
+            "chat": {
+                "id": "CHAT_CHANNEL_ID",
+                "webhookUrl": "OPTIONAL_WEBHOOK_URL"
+            },
+            "staff": {
+                "id": "STAFF_CHANNEL_ID",
+                "webhookUrl": "OPTIONAL_WEBHOOK_URL"
+            }
+        },
+        "webhook": {
+            "enabled": true,
+            "avatarAPI": "https://minotar.net/helm/{username}/64.png"
+        },
+        "interGuild": {
+            "enabled": true,
+            "officerToGuildChat": false,
+            "messageFormat": "[{sourceGuildTag}] {username}: {message}",
+            "eventFormat": "[{sourceGuildTag}] {eventText}"
+        },
+        "rateLimit": {
+            "discord": {
+                "limit": 5,
+                "window": 10000
+            },
+            "minecraft": {
+                "limit": 3,
+                "window": 10000
+            },
+            "interGuild": {
+                "limit": 2,
+                "window": 10000
+            },
+            "events": {
+                "limit": 10,
+                "window": 60000
+            }
+        },
+        "messageQueue": {
+            "maxSize": 1000,
+            "processingInterval": 1000,
+            "maxRetries": 3,
+            "retryDelay": 2000,
+            "priorityLevels": ["high", "normal", "low"]
+        },
+        "messageTemplates": {
+            "templateSet": "default",
+            "customTemplates": {
+                "minecraftToDiscord": {
+                    "guild": "{message}",
+                    "officer": "🛡️ **[OFFICER]** {message}",
+                    "withGuildTag": "[{guildTag}] {username}: {message}"
+                },
+                "discordToMinecraft": {
+                    "guild": "Discord > {username}: {message}",
+                    "officer": "Discord Staff > {username}: {message}"
+                },
+                "interGuild": {
+                    "message": "[{sourceGuildTag}] {username}: {message}",
+                    "event": "[{sourceGuildTag}] {eventText}"
+                },
+                "events": {
+                    "discord": {
+                        "join": "**{username} joined the guild!** 👋",
+                        "leave": "**{username} left the guild** 👋",
+                        "kick": "**{username} was kicked{kickedBy}** 🚫",
+                        "promote": "**{username} was promoted to {toRank}** ⬆️",
+                        "demote": "**{username} was demoted to {toRank}** ⬇️",
+                        "level": "**Guild reached level {level}!** 🎉"
+                    }
+                },
+                "notifications": {
+                    "connection": {
+                        "connected": "✅ **{guildName}** ({username}) connected",
+                        "disconnected": "🔴 **{guildName}** ({username}) disconnected{reason}",
+                        "failed": "❌ **{guildName}** ({username}) connection failed: {error}"
+                    },
+                    "bridge": {
+                        "started": "🌉 Bridge started successfully!",
+                        "stopped": "🛑 Bridge shutting down...",
+                        "error": "❌ Bridge error: {error}"
+                    },
+                    "system": {
+                        "startup": "🚀 {appName} v{version} starting up...",
+                        "ready": "✅ {appName} is ready! Connected to {guildCount} guilds",
+                        "shutdown": "🏁 {appName} shutting down gracefully...",
+                        "error": "💥 System error: {error}"
+                    }
+                }
+            }
+        }
+    },
+    "features": {
+        "logging": {
+            "level": "info",
+            "console": true,
+            "file": true,
+            "logFileDirectory": "./data/logs"
+        },
+        "messageSystem": {
+            "enableDebugLogging": false,
+            "validateTemplates": true,
+            "cacheFormattedMessages": false
+        },
+        "chatParser": {
+            "enableDebugLogging": false,
+            "strictParsing": false,
+            "maxMessageLength": 256,
+            "serverType": "Hypixel",
+            "customPatterns": {
+                "guild": [],
+                "officer": [],
+                "ignore": []
+            }
+        },
+        "eventParser": {
+            "enableDebugLogging": false,
+            "strictParsing": false,
+            "eventCooldown": 5000,
+            "serverType": "Hypixel",
+            "customEventPatterns": {
+                "join": [],
+                "leave": [],
+                "kick": [],
+                "promote": [],
+                "demote": []
+            }
+        },
+        "messageQueue": {
+            "maxSize": 1000,
+            "processingInterval": 1000,
+            "maxRetries": 3,
+            "retryDelay": 2000,
+            "autoStart": true
+        },
+        "notifications": {
+            "levels": {
+                "info": {
+                    "enabled": true,
+                    "color": 3447003,
+                    "emoji": "ℹ️",
+                    "rateLimit": 5
+                },
+                "success": {
+                    "enabled": true,
+                    "color": 3066993,
+                    "emoji": "✅",
+                    "rateLimit": 10
+                },
+                "warning": {
+                    "enabled": true,
+                    "color": 15844367,
+                    "emoji": "⚠️",
+                    "rateLimit": 10
+                },
+                "error": {
+                    "enabled": true,
+                    "color": 15158332,
+                    "emoji": "❌",
+                    "rateLimit": 5
+                },
+                "debug": {
+                    "enabled": false,
+                    "color": 9807270,
+                    "emoji": "🔍",
+                    "rateLimit": 2
+                }
+            },
+            "batchSimilar": true,
+            "batchTimeWindow": 30000,
+            "includeSystemInfo": true,
+            "suppressDuringMaintenance": false
+        }
+    },
+    "advanced": {
+        "messageCleaner": {
+            "removeColorCodes": true,
+            "removeFormatting": false,
+            "normalizeWhitespace": true,
+            "maxLength": 2000,
+            "preserveEmojis": true,
+            "stripUrls": false,
+            "escapeDiscordMarkdown": false
+        },
+        "routing": {
+            "messageRouting": {
+                "enableDebugLogging": false,
+                "retryFailedMessages": true,
+                "maxRetryAttempts": 3
+            },
+            "eventRouting": {
+                "enableDebugLogging": false,
+                "eventCooldownDuration": 30000,
+                "filterSpamEvents": true
+            }
+        },
+        "performance": {
+            "enablePerformanceMonitoring": true,
+            "logSlowOperations": true,
+            "slowOperationThreshold": 1000,
+            "memoryMonitoring": true,
+            "statisticsInterval": 300000
+        }
+    }
+}

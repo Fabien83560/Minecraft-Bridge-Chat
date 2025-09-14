@@ -1,0 +1,42 @@
+{
+	"name": "minecraft-bridge-chat",
+	"version": "1.0.0",
+	"description": "",
+	"main": "src/main.js",
+	"scripts": {
+		"start": "node src/main.js",
+		"dev": "node --watch src/main.js",
+		"test": "echo \"Error: no test specified\" && exit 1"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/Fabien83560/Minecraft-Bridge-Chat.git"
+	},
+	"keywords": [
+		"minecraft",
+		"bot",
+		"chat",
+		"bridge",
+		"mineflayer"
+	],
+	"author": "Fabien83560",
+	"license": "ISC",
+	"bugs": {
+		"url": "https://github.com/Fabien83560/Minecraft-Bridge-Chat/issues"
+	},
+	"homepage": "https://github.com/Fabien83560/Minecraft-Bridge-Chat#readme",
+	"dependencies": {
+		"@discordjs/rest": "^2.6.0",
+		"discord-api-types": "^0.38.24",
+		"discord.js": "^14.22.1",
+		"mineflayer": "^4.33.0",
+		"mineflayer-pathfinder": "^2.4.5",
+		"prismarine-auth": "^2.7.0"
+	},
+	"overrides": {
+		"axios": "^1.7.9"
+	},
+	"engines": {
+		"node": ">=22.0.0"
+	}
+}

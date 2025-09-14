@@ -1,0 +1,9 @@
+# Node
+node_modules
+package-lock.json
+
+# Config
+config/settings.json
+
+# Data of the bot
+data

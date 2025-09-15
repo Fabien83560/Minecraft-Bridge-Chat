@@ -1,6 +1,6 @@
 // Specific Imports
-const logger = require("../../../shared/logger");
-const { getPatternLoader } = require("../../../config/PatternLoader.js");
+const logger = require("../../../../shared/logger");
+const { getPatternLoader } = require("../../../../config/PatternLoader.js");
 
 class EventPatterns {
     constructor(config) {

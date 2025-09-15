@@ -9,7 +9,7 @@
     "guilds": [
         {
             "name": "FrenchLegacy",
-            "tag": "[V1]",
+            "tag": "V1",
             "id": "fl1guild",
             "enabled": true,
             "server": {
@@ -45,7 +45,7 @@
         },
         {
             "name": "FrenchLegacyII",
-            "tag": "[V2]",
+            "tag": "V2",
             "id": "fl2guild",
             "enabled": true,
             "server": {
@@ -98,8 +98,18 @@
         "interGuild": {
             "enabled": true,
             "officerToGuildChat": false,
-            "messageFormat": "[{sourceGuildTag}] {username}: {message}",
-            "eventFormat": "[{sourceGuildTag}] {eventText}"
+            "showTags": true,
+            "showSourceTag": true,
+            "shareableEvents": [
+                "join",
+                "leave",
+                "kick",
+                "promote",
+                "demote",
+                "level",
+                "motd"
+            ],
+            "enableDebugLogging": false
         },
         "rateLimit": {
             "discord": {
@@ -125,52 +135,6 @@
             "maxRetries": 3,
             "retryDelay": 2000,
             "priorityLevels": ["high", "normal", "low"]
-        },
-        "messageTemplates": {
-            "templateSet": "default",
-            "customTemplates": {
-                "minecraftToDiscord": {
-                    "guild": "{message}",
-                    "officer": "🛡️ **[OFFICER]** {message}",
-                    "withGuildTag": "[{guildTag}] {username}: {message}"
-                },
-                "discordToMinecraft": {
-                    "guild": "Discord > {username}: {message}",
-                    "officer": "Discord Staff > {username}: {message}"
-                },
-                "interGuild": {
-                    "message": "[{sourceGuildTag}] {username}: {message}",
-                    "event": "[{sourceGuildTag}] {eventText}"
-                },
-                "events": {
-                    "discord": {
-                        "join": "**{username} joined the guild!** 👋",
-                        "leave": "**{username} left the guild** 👋",
-                        "kick": "**{username} was kicked{kickedBy}** 🚫",
-                        "promote": "**{username} was promoted to {toRank}** ⬆️",
-                        "demote": "**{username} was demoted to {toRank}** ⬇️",
-                        "level": "**Guild reached level {level}!** 🎉"
-                    }
-                },
-                "notifications": {
-                    "connection": {
-                        "connected": "✅ **{guildName}** ({username}) connected",
-                        "disconnected": "🔴 **{guildName}** ({username}) disconnected{reason}",
-                        "failed": "❌ **{guildName}** ({username}) connection failed: {error}"
-                    },
-                    "bridge": {
-                        "started": "🌉 Bridge started successfully!",
-                        "stopped": "🛑 Bridge shutting down...",
-                        "error": "❌ Bridge error: {error}"
-                    },
-                    "system": {
-                        "startup": "🚀 {appName} v{version} starting up...",
-                        "ready": "✅ {appName} is ready! Connected to {guildCount} guilds",
-                        "shutdown": "🏁 {appName} shutting down gracefully...",
-                        "error": "💥 System error: {error}"
-                    }
-                }
-            }
         }
     },
     "features": {
@@ -215,6 +179,13 @@
             "customPatternsEnabled": true,
             "fallbackToVanilla": true,
             "enableColorCodes": true,
+            "enableDebugLogging": false
+        },
+        "templates": {
+            "reloadOnChange": false,
+            "cacheTemplates": true,
+            "customTemplatesEnabled": true,
+            "fallbackToBasic": true,
             "enableDebugLogging": false
         },
         "messageQueue": {

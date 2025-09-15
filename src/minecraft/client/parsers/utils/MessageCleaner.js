@@ -1,5 +1,5 @@
 // Specific Imports
-const logger = require("../../../shared/logger")
+const logger = require("../../../../shared/logger")
 
 class MessageCleaner {
     constructor(config) {

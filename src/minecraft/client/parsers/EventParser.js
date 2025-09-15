@@ -1,8 +1,8 @@
 // Specific Imports
-const BridgeLocator = require("../../bridgeLocator.js");
+const BridgeLocator = require("../../../bridgeLocator.js");
 const MessageCleaner = require("./utils/MessageCleaner.js");
 const EventPatterns = require("./patterns/EventPatterns.js");
-const logger = require("../../shared/logger");
+const logger = require("../../../shared/logger");
 
 class EventParser {
     constructor() {

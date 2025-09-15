@@ -1,7 +1,7 @@
 // Specific Imports
 const BotManager = require("./client/botManager.js")
 const BridgeLocator = require("../bridgeLocator.js");
-const logger = require('../shared/logger');
+const logger = require('../shared/logger/index.js');
 
 class MinecraftManager {
     constructor() {

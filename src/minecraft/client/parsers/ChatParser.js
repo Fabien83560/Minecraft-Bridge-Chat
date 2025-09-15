@@ -1,6 +1,6 @@
 // Specific Imports
-const logger = require("../../shared/logger");
-const BridgeLocator = require("../../bridgeLocator.js");
+const logger = require("../../../shared/logger");
+const BridgeLocator = require("../../../bridgeLocator.js");
 const MessagePatterns = require("./patterns/MessagePatterns.js");
 const MessageCleaner = require("./utils/MessageCleaner.js");
 

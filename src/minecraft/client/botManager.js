@@ -4,7 +4,8 @@ const EventEmitter = require('events');
 // Specific Imports
 const BridgeLocator = require("../../bridgeLocator.js");
 const MinecraftConnection = require("./connection.js");
-const MessageCoordinator = require("../parsers/MessageCoordinator.js");
+const MessageCoordinator = require("../client/parsers/MessageCoordinator.js");
+const InterGuildManager = require("../../shared/InterGuildManager.js");
 const logger = require("../../shared/logger");
 
 class BotManager extends EventEmitter {
@@ -17,6 +18,7 @@ class BotManager extends EventEmitter {
         this.connections = new Map();
         this.reconnectTimers = new Map();
         this.messageCoordinator = new MessageCoordinator();
+        this.interGuildManager = new InterGuildManager();
 
         this.initialize();
     }
@@ -35,7 +37,7 @@ class BotManager extends EventEmitter {
             this.connections.set(guild.id, connection);
 
             logger.info(`Connection initialized for ${guild.name}`);
-        })
+        });
     }
 
     async startAll() {
@@ -62,7 +64,7 @@ class BotManager extends EventEmitter {
                 failCount++;
                 logger.logError(result.reason, `Failed to start connection for ${guildName}`);
             }
-        })
+        });
 
         logger.minecraft(`✅ Connection summary: ${successCount} successful, ${failCount} failed`);
         
@@ -160,6 +162,9 @@ class BotManager extends EventEmitter {
             // Log the processing result with [GUILD] prefix
             logger.bridge(`[GUILD] [${guildConfig.name}] Message processed - Category: ${result.category}, Type: ${result.data.type || 'unknown'}`);
             
+            // Handle inter-guild processing for messages and events
+            this.handleInterGuildProcessing(result, guildConfig, guildMessageData);
+            
             // Emit the appropriate event based on category
             if (result.category === 'message') {
                 logger.bridge(`[GUILD] [${guildConfig.name}] Emitting message event - Username: ${result.data.username || 'unknown'}, Message: "${result.data.message || 'N/A'}"`);
@@ -174,6 +179,33 @@ class BotManager extends EventEmitter {
             
         } catch (error) {
             logger.logError(error, `Error processing guild message for ${guildConfig.name}`);
+        }
+    }
+
+    /**
+     * Handle inter-guild processing for messages and events
+     * @param {object} result - Processed message/event result
+     * @param {object} guildConfig - Guild configuration
+     * @param {object} guildMessageData - Strategy message data
+     */
+    async handleInterGuildProcessing(result, guildConfig, guildMessageData) {
+        try {
+            // Only process if inter-guild is enabled and this message needs processing
+            if (!guildMessageData.needsInterGuildProcessing) {
+                return;
+            }
+
+            if (result.category === 'message' && result.data.type === 'guild_chat') {
+                // Process guild chat message for inter-guild transfer
+                await this.interGuildManager.processGuildMessage(result.data, guildConfig, this);
+                
+            } else if (result.category === 'event' && result.data.parsedSuccessfully) {
+                // Process guild event for inter-guild transfer
+                await this.interGuildManager.processGuildEvent(result.data, guildConfig, this);
+            }
+            
+        } catch (error) {
+            logger.logError(error, `Error in inter-guild processing for ${guildConfig.name}`);
         }
     }
 
@@ -232,6 +264,11 @@ class BotManager extends EventEmitter {
         }
         this.reconnectTimers.clear();
 
+        // Stop inter-guild manager
+        if (this.interGuildManager) {
+            this.interGuildManager.stopQueueProcessor();
+        }
+
         // Disconnect all connections
         const disconnectPromises = [];
         
@@ -248,14 +285,27 @@ class BotManager extends EventEmitter {
     async sendMessage(guildId, message) {
         const connection = this.connections.get(guildId);
         if (!connection) {
-            throw new Error(`No connection found for guild: ${guildId}`);
+            const error = `No connection found for guild: ${guildId}`;
+            logger.error(`[INTER-GUILD] ${error}`);
+            throw new Error(error);
         }
 
         if (!connection.isconnected()) {
-            throw new Error(`Guild ${guildId} is not connected`);
+            const error = `Guild ${guildId} is not connected`;
+            logger.error(`[INTER-GUILD] ${error}`);
+            throw new Error(error);
         }
 
-        return connection.sendMessage(message);
+        logger.bridge(`[INTER-GUILD] BotManager sending message to ${guildId}: "${message}"`);
+        
+        try {
+            const result = await connection.sendMessage(message);
+            logger.bridge(`[INTER-GUILD] ✅ Message sent successfully to ${connection.getGuildConfig().name}`);
+            return result;
+        } catch (error) {
+            logger.logError(error, `[INTER-GUILD] Failed to send message to ${connection.getGuildConfig().name}`);
+            throw error;
+        }
     }
 
     async executeCommand(guildId, command) {
@@ -302,6 +352,38 @@ class BotManager extends EventEmitter {
         }
 
         return connectedGuilds;
+    }
+
+    // Inter-guild manager methods
+    getInterGuildStats() {
+        if (!this.interGuildManager) {
+            return null;
+        }
+
+        return this.interGuildManager.getStatistics();
+    }
+
+    updateInterGuildConfig(newConfig) {
+        if (this.interGuildManager) {
+            this.interGuildManager.updateConfig(newConfig);
+            logger.info('Inter-guild configuration updated via BotManager');
+        }
+    }
+
+    testInterGuildFormatting(testData) {
+        if (!this.interGuildManager) {
+            return { error: 'InterGuildManager not available' };
+        }
+
+        return this.interGuildManager.testMessageFormatting(testData);
+    }
+
+    clearInterGuildCache() {
+        if (this.interGuildManager) {
+            this.interGuildManager.clearQueue();
+            this.interGuildManager.clearRateLimit();
+            logger.info('Inter-guild cache cleared via BotManager');
+        }
     }
 
     // Event forwarding methods

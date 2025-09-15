@@ -140,14 +140,71 @@ class HypixelStrategy {
         const guildMessageResult = this.processGuildMessage(messageText, guildConfig);
         
         if (guildMessageResult) {
+            // CRITICAL: Check if this message was sent by our own bot to avoid infinite loops
+            if (this.isOwnBotMessage(messageText, guildConfig)) {
+                logger.debug(`[${guildConfig.name}] Ignoring own bot message: ${messageText}`);
+                return null;
+            }
+
             // Log all guild messages with [GUILD] prefix
             logger.bridge(`[GUILD] [${guildConfig.name}] ${guildMessageResult.type}: ${messageText}`);
+            
+            // For inter-guild processing, we need to set additional metadata
+            guildMessageResult.sourceGuildConfig = guildConfig;
+            guildMessageResult.needsInterGuildProcessing = this.shouldProcessForInterGuild(guildMessageResult.type);
             
             return guildMessageResult;
         }
 
         // Not a guild message, ignore
         return null;
+    }
+
+    /**
+     * Check if a message was sent by our own bot (to avoid infinite loops)
+     * @param {string} messageText - Message text to check
+     * @param {object} guildConfig - Guild configuration
+     * @returns {boolean} Whether this message was sent by our own bot
+     */
+    isOwnBotMessage(messageText, guildConfig) {
+        const botUsername = guildConfig.account.username;
+        
+        // Extract username from guild chat patterns
+        // Pattern examples:
+        // "Guild > [MVP+] BotUsername [Mod]: message"
+        // "Guild > BotUsername: message"
+        // "G > BotUsername: message"
+        
+        const guildPatterns = [
+            /^Guild > (?:\[.*?\]\s+)?(\w+)(?:\s+\[.*?\])?: (.+)$/,  // Guild > [rank] username [rank]: message
+            /^G > (?:\[.*?\]\s+)?(\w+)(?:\s+\[.*?\])?: (.+)$/,      // G > [rank] username [rank]: message
+            /^§2Guild > §r(?:\[.*?\]\s+)?(\w+)§r(?:\s+\[.*?\])?: (.+)$/, // With color codes
+            /^§aGuild > §r(?:\[.*?\]\s+)?(\w+)§r(?:\s+\[.*?\])?: (.+)$/  // With alternative color codes
+        ];
+        
+        for (const pattern of guildPatterns) {
+            const match = messageText.match(pattern);
+            if (match && match[1] === botUsername) {
+                return true;
+            }
+        }
+        
+        return false;
+    }
+
+    /**
+     * Check if a message type should be processed for inter-guild transfer
+     * @param {string} messageType - Message type
+     * @returns {boolean} Whether message should be processed for inter-guild
+     */
+    shouldProcessForInterGuild(messageType) {
+        const interGuildTypes = [
+            'GUILD_CHAT',
+            'OFFICER_CHAT', 
+            'GUILD_EVENT'
+        ];
+        
+        return interGuildTypes.includes(messageType);
     }
 
     /**
@@ -202,6 +259,21 @@ class HypixelStrategy {
         }
 
         return null;
+    }
+
+    /**
+     * Check if a message type should be processed for inter-guild transfer
+     * @param {string} messageType - Message type
+     * @returns {boolean} Whether message should be processed for inter-guild
+     */
+    shouldProcessForInterGuild(messageType) {
+        const interGuildTypes = [
+            'GUILD_CHAT',
+            'OFFICER_CHAT', 
+            'GUILD_EVENT'
+        ];
+        
+        return interGuildTypes.includes(messageType);
     }
 
     /**

@@ -1,0 +1,217 @@
+{
+  "servers": {
+    "messagesToMinecraft": {
+      "Hypixel": {
+        "guild": {
+          "basic": "{username}: {message}",
+          "withTag": "{username} {tag}: {message}",
+          "withSourceTag": "[{sourceGuildTag}] {username}: {message}",
+          "withBothTags": "[{sourceGuildTag}] {username} {tag}: {message}"
+        },
+        "officer": {
+          "basic": "[OFFICER] {username}: {message}",
+          "withTag": "[OFFICER] {username} {tag}: {message}",
+          "withSourceTag": "[{sourceGuildTag}] [OFFICER] {username}: {message}",
+          "withBothTags": "[{sourceGuildTag}] [OFFICER] {username} {tag}: {message}"
+        },
+        "events": {
+          "join": {
+            "basic": "{username} joined the guild!",
+            "withTag": "{username} {tag} joined the guild!",
+            "withSourceTag": "[{sourceGuildTag}] {username} joined the guild!",
+            "withBothTags": "[{sourceGuildTag}] {username} {tag} joined the guild!"
+          },
+          "leave": {
+            "basic": "{username} left the guild",
+            "withTag": "{username} {tag} left the guild",
+            "withSourceTag": "[{sourceGuildTag}] {username} left the guild",
+            "withBothTags": "[{sourceGuildTag}] {username} {tag} left the guild"
+          },
+          "kick": {
+            "basic": "{username} was kicked from the guild{kickedBy}",
+            "withTag": "{username} {tag} was kicked from the guild{kickedBy}",
+            "withSourceTag": "[{sourceGuildTag}] {username} was kicked from the guild{kickedBy}",
+            "withBothTags": "[{sourceGuildTag}] {username} {tag} was kicked from the guild{kickedBy}"
+          },
+          "promote": {
+            "basic": "{username} was promoted to {toRank}",
+            "withTag": "{username} {tag} was promoted to {toRank}",
+            "withSourceTag": "[{sourceGuildTag}] {username} was promoted to {toRank}",
+            "withBothTags": "[{sourceGuildTag}] {username} {tag} was promoted to {toRank}"
+          },
+          "demote": {
+            "basic": "{username} was demoted to {toRank}",
+            "withTag": "{username} {tag} was demoted to {toRank}",
+            "withSourceTag": "[{sourceGuildTag}] {username} was demoted to {toRank}",
+            "withBothTags": "[{sourceGuildTag}] {username} {tag} was demoted to {toRank}"
+          },
+          "level": {
+            "basic": "Guild reached level {level}!",
+            "withTag": "Guild reached level {level}!",
+            "withSourceTag": "[{sourceGuildTag}] Guild reached level {level}!",
+            "withBothTags": "[{sourceGuildTag}] Guild reached level {level}!"
+          },
+          "motd": {
+            "basic": "{changer} changed the guild MOTD to: {motd}",
+            "withTag": "{changer} {tag} changed the guild MOTD to: {motd}",
+            "withSourceTag": "[{sourceGuildTag}] {changer} changed the guild MOTD to: {motd}",
+            "withBothTags": "[{sourceGuildTag}] {changer} {tag} changed the guild MOTD to: {motd}"
+          }
+        },
+        "system": {
+          "connection": {
+            "connected": "[SYSTEM] {guildName} bot connected",
+            "disconnected": "[SYSTEM] {guildName} bot disconnected{reason}",
+            "reconnected": "[SYSTEM] {guildName} bot reconnected"
+          },
+          "error": {
+            "basic": "[ERROR] {error}",
+            "withContext": "[ERROR] {context}: {error}"
+          }
+        }
+      }
+    },
+    "messagesToDiscord": {
+      "Hypixel": {
+        "guild": {
+          "basic": "**{username}**: {message}",
+          "withTag": "**{username}** `{tag}`: {message}",
+          "withSourceTag": "**[{sourceGuildTag}]** **{username}**: {message}",
+          "withBothTags": "**[{sourceGuildTag}]** **{username}** `{tag}`: {message}",
+          "embed": {
+            "title": "Guild Chat - {guildName}",
+            "description": "**{username}**: {message}",
+            "color": 3447003,
+            "footer": "From {guildName}"
+          }
+        },
+        "officer": {
+          "basic": "🛡️ **[OFFICER]** **{username}**: {message}",
+          "withTag": "🛡️ **[OFFICER]** **{username}** `{tag}`: {message}",
+          "withSourceTag": "🛡️ **[{sourceGuildTag}]** **[OFFICER]** **{username}**: {message}",
+          "withBothTags": "🛡️ **[{sourceGuildTag}]** **[OFFICER]** **{username}** `{tag}`: {message}",
+          "embed": {
+            "title": "🛡️ Officer Chat - {guildName}",
+            "description": "**{username}**: {message}",
+            "color": 15844367,
+            "footer": "From {guildName}"
+          }
+        },
+        "events": {
+          "join": {
+            "basic": "**{username} joined the guild!** 👋",
+            "withTag": "**{username}** `{tag}` **joined the guild!** 👋",
+            "withSourceTag": "**[{sourceGuildTag}]** **{username} joined the guild!** 👋",
+            "withBothTags": "**[{sourceGuildTag}]** **{username}** `{tag}` **joined the guild!** 👋"
+          },
+          "leave": {
+            "basic": "**{username} left the guild** 👋",
+            "withTag": "**{username}** `{tag}` **left the guild** 👋",
+            "withSourceTag": "**[{sourceGuildTag}]** **{username} left the guild** 👋",
+            "withBothTags": "**[{sourceGuildTag}]** **{username}** `{tag}` **left the guild** 👋"
+          },
+          "kick": {
+            "basic": "**{username} was kicked{kickedBy}** 🚫",
+            "withTag": "**{username}** `{tag}` **was kicked{kickedBy}** 🚫",
+            "withSourceTag": "**[{sourceGuildTag}]** **{username} was kicked{kickedBy}** 🚫",
+            "withBothTags": "**[{sourceGuildTag}]** **{username}** `{tag}` **was kicked{kickedBy}** 🚫"
+          },
+          "promote": {
+            "basic": "**{username} was promoted to {toRank}** ⬆️",
+            "withTag": "**{username}** `{tag}` **was promoted to {toRank}** ⬆️",
+            "withSourceTag": "**[{sourceGuildTag}]** **{username} was promoted to {toRank}** ⬆️",
+            "withBothTags": "**[{sourceGuildTag}]** **{username}** `{tag}` **was promoted to {toRank}** ⬆️"
+          },
+          "demote": {
+            "basic": "**{username} was demoted to {toRank}** ⬇️",
+            "withTag": "**{username}** `{tag}` **was demoted to {toRank}** ⬇️",
+            "withSourceTag": "**[{sourceGuildTag}]** **{username} was demoted to {toRank}** ⬇️",
+            "withBothTags": "**[{sourceGuildTag}]** **{username}** `{tag}` **was demoted to {toRank}** ⬇️"
+          },
+          "level": {
+            "basic": "**Guild reached level {level}!** 🎉",
+            "withTag": "**Guild reached level {level}!** 🎉",
+            "withSourceTag": "**[{sourceGuildTag}]** **Guild reached level {level}!** 🎉",
+            "withBothTags": "**[{sourceGuildTag}]** **Guild reached level {level}!** 🎉"
+          },
+          "motd": {
+            "basic": "**{changer} changed the guild MOTD to:** {motd}",
+            "withTag": "**{changer}** `{tag}` **changed the guild MOTD to:** {motd}",
+            "withSourceTag": "**[{sourceGuildTag}]** **{changer} changed the guild MOTD to:** {motd}",
+            "withBothTags": "**[{sourceGuildTag}]** **{changer}** `{tag}` **changed the guild MOTD to:** {motd}"
+          }
+        },
+        "system": {
+          "connection": {
+            "connected": "✅ **{guildName}** bot connected",
+            "disconnected": "🔴 **{guildName}** bot disconnected{reason}",
+            "reconnected": "🔄 **{guildName}** bot reconnected"
+          },
+          "error": {
+            "basic": "❌ **Error:** {error}",
+            "withContext": "❌ **Error in {context}:** {error}"
+          }
+        }
+      }
+    }
+  },
+  "defaults": {
+    "placeholders": {
+      "username": "Player",
+      "message": "Hello!",
+      "tag": "TAG",
+      "sourceGuildTag": "SRC",
+      "guildName": "Guild",
+      "toRank": "Member",
+      "fromRank": "Guest",
+      "level": "1",
+      "changer": "Player",
+      "motd": "Welcome to our guild!",
+      "kickedBy": "",
+      "reason": ""
+    },
+    "colors": {
+      "guild": 3447003,
+      "officer": 15844367,
+      "event": 3066993,
+      "system": 9807270,
+      "error": 15158332
+    },
+    "emojis": {
+      "guild": "💬",
+      "officer": "🛡️",
+      "join": "👋",
+      "leave": "👋",
+      "kick": "🚫",
+      "promote": "⬆️",
+      "demote": "⬇️",
+      "level": "🎉",
+      "motd": "📝",
+      "system": "⚙️",
+      "error": "❌",
+      "success": "✅",
+      "warning": "⚠️"
+    }
+  },
+  "templateSelection": {
+    "priority": {
+      "withBothTags": 1,
+      "withSourceTag": 2,
+      "withTag": 3,
+      "basic": 4
+    },
+    "fallback": "basic"
+  },
+  "metadata": {
+    "version": "1.0.0",
+    "lastUpdated": "2025-01-15",
+    "description": "Message templates for inter-guild and Discord communication",
+    "author": "Minecraft-Bridge-Chat",
+    "supportedPlatforms": ["minecraft", "discord"],
+    "templateFormat": {
+      "placeholders": "Variables surrounded by curly braces {variable}",
+      "conditionalContent": "Optional content based on configuration",
+      "formatting": "Platform-specific formatting (Minecraft vs Discord)"
+    }
+  }
+}

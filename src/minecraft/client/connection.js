@@ -332,7 +332,9 @@ class MinecraftConnection {
                 ? message.substring(0, maxLength - 3) + '...'
                 : message;
 
-            this._bot.chat(truncatedMessage);
+            const fullCommand = `/gc ${truncatedMessage}`;
+            this._bot.chat(fullCommand);
+
             logger.debug(`Message sent for ${this._guildConfig.name}: ${truncatedMessage}`);
         
         } catch (error) {

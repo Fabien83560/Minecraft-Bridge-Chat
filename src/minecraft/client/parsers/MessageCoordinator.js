@@ -1,8 +1,8 @@
 // Specific Imports
-const BridgeLocator = require("../../bridgeLocator.js");
+const BridgeLocator = require("../../../bridgeLocator.js");
 const ChatParser = require("./ChatParser.js");
 const EventParser = require("./EventParser.js");
-const logger = require("../../shared/logger");
+const logger = require("../../../shared/logger");
 
 class MessageCoordinator {
     constructor() {
@@ -15,7 +15,7 @@ class MessageCoordinator {
 
     /**
      * Process a guild message (pre-filtered by strategy)
-     * @param {string|object} rawMessage - Raw message from Minecraft
+     * @param {string|object} rawMessage - Raw message from Minecraft client
      * @param {object} guildConfig - Guild configuration
      * @returns {object} Processing result with category and data
      */
@@ -38,6 +38,20 @@ class MessageCoordinator {
         // Try to parse as chat message
         const chatData = this.chatParser.parseMessage(rawMessage, guildConfig);
         if (chatData.type === 'guild_chat') {
+            // ADDITIONAL CHECK: Verify this isn't our own bot message (defense in depth)
+            if (this.isOwnBotMessage(chatData, guildConfig)) {
+                logger.debug(`[GUILD] [${guildConfig.name}] MessageCoordinator filtering own bot message from ${chatData.username}`);
+                return {
+                    category: 'ignored',
+                    data: {
+                        type: 'own_bot_message',
+                        reason: 'Message sent by our own bot',
+                        username: chatData.username,
+                        raw: messageText
+                    }
+                };
+            }
+
             logger.bridge(`[GUILD] [${guildConfig.name}] Parsed as guild chat - Chat Type: ${chatData.chatType}, Username: ${chatData.username}, Message: "${chatData.message}"`);
             return {
                 category: 'message',
@@ -64,6 +78,20 @@ class MessageCoordinator {
             category: chatData.type,
             data: chatData
         };
+    }
+
+    /**
+     * Check if parsed chat data represents our own bot message
+     * @param {object} chatData - Parsed chat data
+     * @param {object} guildConfig - Guild configuration
+     * @returns {boolean} Whether this is our own bot message
+     */
+    isOwnBotMessage(chatData, guildConfig) {
+        if (!chatData.username || !guildConfig.account.username) {
+            return false;
+        }
+        
+        return chatData.username.toLowerCase() === guildConfig.account.username.toLowerCase();
     }
 
     /**

@@ -183,13 +183,21 @@ class BotManager extends EventEmitter {
 
         const guildConfig = connection.getGuildConfig();
         
+        // Log message processing
+        logger.bridge(`[${guildConfig.name}] Processing message through coordinator`);
+        
         // Process message through coordinator
         const result = this.messageCoordinator.processMessage(message, guildConfig);
         
+        // Log the processing result
+        logger.bridge(`[${guildConfig.name}] Message processed - Category: ${result.category}, Type: ${result.data.type || 'unknown'}`);
+        
         // Only emit relevant messages/events
         if (result.category === 'message') {
+            logger.bridge(`[${guildConfig.name}] Emitting message event - Username: ${result.data.username || 'unknown'}`);
             this.emit('message', result.data);
         } else if (result.category === 'event') {
+            logger.bridge(`[${guildConfig.name}] Emitting event - Type: ${result.data.type}, Username: ${result.data.username || 'system'}`);
             this.emit('event', result.data);
         }
     }

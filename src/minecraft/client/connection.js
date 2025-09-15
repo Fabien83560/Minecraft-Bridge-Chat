@@ -204,7 +204,7 @@ class MinecraftConnection {
         logger.minecraft(`Applying ${serverName} reconnection strategy for ${this._guildConfig.name}`);
 
         try {
-            await this.strategyManager.executeReconnectStrategy(this.bot, this._guildConfig);
+            await this.strategyManager.executeReconnectStrategy(this._bot, this._guildConfig);
             logger.minecraft(`✅ Reconnection strategy completed for ${this._guildConfig.name}`);
         } catch (error) {
             logger.logError(error, `Reconnection strategy failed for ${this._guildConfig.name}`);
@@ -283,13 +283,20 @@ class MinecraftConnection {
     }
 
     handleMessage(message) {
+        logger.bridge(`[${this._guildConfig.name}] Raw message received:`, message.toString());
+        
         // Delegate message handling to the appropriate strategy
-        this.strategyManager.handleMessage(this.bot, message, this._guildConfig);
+        this.strategyManager.handleMessage(this._bot, message, this._guildConfig);
     }
 
     handleChatMessage(message, messagePosition, jsonMsg) {
-        // Log message for debugging (only in debug mode)
-        logger.debug(`[${this._guildConfig.name}] Chat: ${message}`);
+        // Log the chat message with position info
+        logger.bridge(`[${this._guildConfig.name}] Chat message (pos: ${messagePosition}):`, message);
+        
+        // Log JSON message data if available for debugging
+        if (jsonMsg) {
+            logger.debug(`[${this._guildConfig.name}] JSON message data:`, jsonMsg);
+        }
 
         // TODO: Add chat parsing logic here
     }

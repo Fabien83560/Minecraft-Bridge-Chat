@@ -64,7 +64,7 @@ class BotManager extends EventEmitter {
             }
         })
 
-        logger.minecraft(`Connection summary: ${successCount} successful, ${failCount} failed`);
+        logger.minecraft(`✅ Connection summary: ${successCount} successful, ${failCount} failed`);
         
         if (successCount === 0) {
             throw new Error('Failed to start any Minecraft connections');

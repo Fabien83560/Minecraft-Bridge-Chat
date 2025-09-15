@@ -145,7 +145,7 @@ class MinecraftConnection {
 
             this._bot.once('spawn', () => {
                 clearTimeout(timeout);
-                logger.minecraft(`Bot spawned successfully for ${this._guildConfig.name}`);
+                logger.minecraft(`✅ Bot spawned successfully for ${this._guildConfig.name}`);
                 resolve();
             });
 
@@ -256,7 +256,7 @@ class MinecraftConnection {
 
         // Login events
         this._bot.on('login', () => {
-            logger.minecraft(`Login successful for ${this._guildConfig.name}`);
+            logger.minecraft(`✅ Login successful for ${this._guildConfig.name}`);
         });
 
         // Health monitoring

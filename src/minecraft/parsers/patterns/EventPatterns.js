@@ -1,193 +1,82 @@
 // Specific Imports
-const logger = require("../../../shared/logger")
+const logger = require("../../../shared/logger");
+const { getPatternLoader } = require("../../../../config/PatternLoader.js");
 
 class EventPatterns {
     constructor(config) {
         this.config = config;
+        this.patternLoader = getPatternLoader();
+        this.serverType = config.serverType || 'Hypixel';
 
-        this.joinPatterns = [];
-        this.leavePatterns = [];
-        this.kickPatterns = [];
-        this.promotePatterns = [];
-        this.demotePatterns = [];
-        this.invitePatterns = [];
-        this.onlinePatterns = [];
-        this.levelPatterns = [];
-        this.motdPatterns = [];
-        this.miscPatterns = [];
-
-        this.initializeEventPatterns();
-    }
-
-    initializeEventPatterns() {
-        // Guild member events - Updated for Hypixel format
-        this.joinPatterns = [
-            // Hypixel specific formats
-            { pattern: /^Guild > (\w+) joined\.$/, groups: ['username'] },
-            { pattern: /^G > (\w+) joined\.$/, groups: ['username'] },
-            
-            // Standard join messages
-            { pattern: /(\w+) joined the guild!/, groups: ['username'] },
-            { pattern: /(\w+) has joined the guild/, groups: ['username'] },
-            { pattern: /Guild member (\w+) joined/, groups: ['username'] },
-            { pattern: /Welcome (\w+) to the guild!/, groups: ['username'] },
-            
-            // With color codes
-            { pattern: /§a(\w+) joined the guild!§r/, groups: ['username'] },
-            { pattern: /§2Guild member §r(\w+)§r joined/, groups: ['username'] },
-            
-            // With ranks/prefixes
-            { pattern: /\[([^\]]+)\] (\w+) joined the guild!/, groups: ['rank', 'username'] },
-            { pattern: /(\w+) \(([^)]+)\) joined the guild!/, groups: ['username', 'rank'] }
-        ];
-
-        this.leavePatterns = [
-            // Hypixel specific formats
-            { pattern: /^Guild > (\w+) left\.$/, groups: ['username'] },
-            { pattern: /^G > (\w+) left\.$/, groups: ['username'] },
-            
-            // Standard leave messages
-            { pattern: /(\w+) left the guild/, groups: ['username'] },
-            { pattern: /(\w+) has left the guild/, groups: ['username'] },
-            { pattern: /Guild member (\w+) left/, groups: ['username'] },
-            
-            // With color codes
-            { pattern: /§c(\w+) left the guild§r/, groups: ['username'] },
-            { pattern: /§4Guild member §r(\w+)§r left/, groups: ['username'] },
-            
-            // With reasons
-            { pattern: /(\w+) left the guild \(([^)]+)\)/, groups: ['username', 'reason'] }
-        ];
-
-        this.kickPatterns = [
-            // Standard kick messages
-            { pattern: /(\w+) was kicked from the guild by (\w+)/, groups: ['username', 'kicker'] },
-            { pattern: /(\w+) was removed from the guild by (\w+)/, groups: ['username', 'kicker'] },
-            { pattern: /(\w+) was kicked from the guild/, groups: ['username'] },
-            
-            // With color codes
-            { pattern: /§c(\w+) was kicked from the guild by §r(\w+)§r/, groups: ['username', 'kicker'] },
-            
-            // With reasons
-            { pattern: /(\w+) was kicked from the guild by (\w+): (.+)/, groups: ['username', 'kicker', 'reason'] }
-        ];
-
-        this.promotePatterns = [
-            // Hypixel specific formats with rank prefixes
-            { pattern: /^\[([^\]]+)\] (\w+) was promoted from (.+) to (.+)$/, groups: ['rank', 'username', 'fromRank', 'toRank'] },
-            { pattern: /^\[([^\]]+)\] (\w+) was promoted to (.+)$/, groups: ['rank', 'username', 'toRank'] },
-            
-            // Standard promotion messages
-            { pattern: /(\w+) was promoted from (.+) to (.+)/, groups: ['username', 'fromRank', 'toRank'] },
-            { pattern: /(\w+) was promoted to (.+)/, groups: ['username', 'toRank'] },
-            { pattern: /(\w+) is now (.+) in the guild/, groups: ['username', 'toRank'] },
-            
-            // With color codes
-            { pattern: /§a(\w+) was promoted to §r(.+)§r/, groups: ['username', 'toRank'] },
-            { pattern: /§2(\w+) is now §r(.+)§r in the guild/, groups: ['username', 'toRank'] },
-            
-            // With promoter
-            { pattern: /(\w+) promoted (\w+) to (.+)/, groups: ['promoter', 'username', 'toRank'] }
-        ];
-
-        this.demotePatterns = [
-            // Hypixel specific formats with rank prefixes
-            { pattern: /^\[([^\]]+)\] (\w+) was demoted from (.+) to (.+)$/, groups: ['rank', 'username', 'fromRank', 'toRank'] },
-            { pattern: /^\[([^\]]+)\] (\w+) was demoted to (.+)$/, groups: ['rank', 'username', 'toRank'] },
-            
-            // Standard demotion messages
-            { pattern: /(\w+) was demoted from (.+) to (.+)/, groups: ['username', 'fromRank', 'toRank'] },
-            { pattern: /(\w+) was demoted to (.+)/, groups: ['username', 'toRank'] },
-            
-            // With color codes
-            { pattern: /§c(\w+) was demoted to §r(.+)§r/, groups: ['username', 'toRank'] },
-            
-            // With demoter
-            { pattern: /(\w+) demoted (\w+) to (.+)/, groups: ['demoter', 'username', 'toRank'] }
-        ];
-
-        this.invitePatterns = [
-            // Standard invite messages
-            { pattern: /(\w+) invited (\w+) to the guild/, groups: ['inviter', 'invited'] },
-            { pattern: /(\w+) has invited (\w+) to join the guild/, groups: ['inviter', 'invited'] },
-            
-            // With color codes
-            { pattern: /§b(\w+) invited §r(\w+)§r to the guild/, groups: ['inviter', 'invited'] },
-            
-            // Guild invite accepted
-            { pattern: /(\w+) accepted (\w+)'s guild invitation/, groups: ['invited', 'inviter'] }
-        ];
-
-        this.onlinePatterns = [
-            // Standard online messages
-            { pattern: /Online Members: (.+)/, groups: ['membersList'] },
-            { pattern: /Guild Members Online \((\d+)\): (.+)/, groups: ['count', 'membersList'] },
-            { pattern: /(\d+) guild members online: (.+)/, groups: ['count', 'membersList'] },
-            
-            // With color codes
-            { pattern: /§aOnline Members§r: (.+)/, groups: ['membersList'] },
-            { pattern: /§2Guild Members Online \((\d+)\)§r: (.+)/, groups: ['count', 'membersList'] }
-        ];
-
-        this.levelPatterns = [
-            // Guild level up messages
-            { pattern: /The Guild has reached Level (\d+)!/, groups: ['level'] },
-            { pattern: /Guild leveled up to Level (\d+)!/, groups: ['level'] },
-            { pattern: /Your guild is now level (\d+)!/, groups: ['level'] },
-            
-            // With color codes
-            { pattern: /§6The Guild has reached Level (\d+)!§r/, groups: ['level'] },
-            { pattern: /§eGuild leveled up to Level (\d+)!§r/, groups: ['level'] }
-        ];
-
-        this.motdPatterns = [
-            // Message of the day changes
-            { pattern: /(\w+) changed the guild MOTD to: (.+)/, groups: ['changer', 'motd'] },
-            { pattern: /Guild MOTD updated by (\w+): (.+)/, groups: ['changer', 'motd'] },
-            
-            // With color codes
-            { pattern: /§b(\w+) changed the guild MOTD to§r: (.+)/, groups: ['changer', 'motd'] }
-        ];
-
-        this.miscPatterns = [
-            // Guild tag changes
-            { pattern: /(\w+) changed the guild tag to \[([^\]]+)\]/, groups: ['changer', 'newTag'] },
-            
-            // Guild name changes
-            { pattern: /(\w+) renamed the guild to (.+)/, groups: ['changer', 'newName'] },
-            
-            // Guild description changes
-            { pattern: /(\w+) updated the guild description/, groups: ['changer'] },
-            
-            // Guild settings changes
-            { pattern: /(\w+) changed guild settings/, groups: ['changer'] }
-        ];
-
-        // Add custom patterns from configuration
-        this.addCustomPatterns();
+        // Pattern cache for performance
+        this.patternCache = new Map();
+        
+        // Validate server support
+        this.validateServerSupport();
+        
+        logger.debug(`EventPatterns initialized for server: ${this.serverType}`);
     }
 
     /**
-     * Add custom patterns from configuration
+     * Validate that the configured server is supported
      */
-    addCustomPatterns() {
-        const custom = this.config.customEventPatterns;
+    validateServerSupport() {
+        if (!this.patternLoader.isServerSupported(this.serverType)) {
+            logger.warn(`Server '${this.serverType}' not found in pattern configuration, falling back to Vanilla`);
+            this.serverType = 'Vanilla';
+        }
+    }
+
+    /**
+     * Get patterns for a specific event type
+     * @param {string} eventType - Event type (join, leave, kick, etc.)
+     * @returns {Array} Array of pattern objects
+     */
+    getEventPatterns(eventType) {
+        const cacheKey = `${this.serverType}-events-${eventType}`;
         
-        if (custom.join) {
-            this.joinPatterns.push(...custom.join.map(p => ({ pattern: p, groups: ['username'], custom: true })));
+        if (this.patternCache.has(cacheKey)) {
+            return this.patternCache.get(cacheKey);
         }
-        if (custom.leave) {
-            this.leavePatterns.push(...custom.leave.map(p => ({ pattern: p, groups: ['username'], custom: true })));
+
+        const patterns = this.patternLoader.getPatterns(this.serverType, 'events', eventType);
+        
+        // Add custom patterns from configuration if any
+        if (this.config.customEventPatterns && this.config.customEventPatterns[eventType]) {
+            const customPatterns = this.config.customEventPatterns[eventType].map(patternStr => ({
+                pattern: new RegExp(patternStr),
+                originalPattern: patternStr,
+                groups: this.getDefaultGroups(eventType),
+                custom: true,
+                description: `Custom ${eventType} pattern`
+            }));
+            patterns.push(...customPatterns);
         }
-        if (custom.kick) {
-            this.kickPatterns.push(...custom.kick.map(p => ({ pattern: p, groups: ['username', 'kicker'], custom: true })));
-        }
-        if (custom.promote) {
-            this.promotePatterns.push(...custom.promote.map(p => ({ pattern: p, groups: ['username', 'toRank'], custom: true })));
-        }
-        if (custom.demote) {
-            this.demotePatterns.push(...custom.demote.map(p => ({ pattern: p, groups: ['username', 'toRank'], custom: true })));
-        }
+
+        this.patternCache.set(cacheKey, patterns);
+        return patterns;
+    }
+
+    /**
+     * Get default groups for an event type
+     * @param {string} eventType - Event type
+     * @returns {Array} Default groups for the event type
+     */
+    getDefaultGroups(eventType) {
+        const defaultGroups = {
+            'join': ['username'],
+            'leave': ['username'],
+            'kick': ['username', 'kicker'],
+            'promote': ['username', 'toRank'],
+            'demote': ['username', 'toRank'],
+            'invite': ['inviter', 'invited'],
+            'online': ['membersList'],
+            'level': ['level'],
+            'motd': ['changer', 'motd'],
+            'misc': ['changer']
+        };
+
+        return defaultGroups[eventType] || [];
     }
 
     /**
@@ -199,41 +88,48 @@ class EventPatterns {
         // Clean message text
         const cleanText = this.cleanMessageForMatching(messageText);
         
-        // DEBUG: Log the exact message we're trying to match
-        logger.debug(`[EventPatterns] Trying to match: "${cleanText}"`);
-        logger.debug(`[EventPatterns] Message length: ${cleanText.length}`);
+        if (this.config.enableDebugLogging) {
+            logger.debug(`[EventPatterns] Trying to match: "${cleanText}"`);
+            logger.debug(`[EventPatterns] Server: ${this.serverType}, Message length: ${cleanText.length}`);
+        }
         
-        // Try each event type
-        const eventTypes = [
-            { type: 'join', patterns: this.joinPatterns },
-            { type: 'leave', patterns: this.leavePatterns },
-            { type: 'kick', patterns: this.kickPatterns },
-            { type: 'promote', patterns: this.promotePatterns },
-            { type: 'demote', patterns: this.demotePatterns },
-            { type: 'invite', patterns: this.invitePatterns },
-            { type: 'online', patterns: this.onlinePatterns },
-            { type: 'level', patterns: this.levelPatterns },
-            { type: 'motd', patterns: this.motdPatterns },
-            { type: 'misc', patterns: this.miscPatterns }
-        ];
+        // Get all event types for this server
+        const eventTypes = this.patternLoader.getEventTypes(this.serverType);
+        
+        if (this.config.enableDebugLogging) {
+            logger.debug(`[EventPatterns] Available event types: ${eventTypes.join(', ')}`);
+        }
 
+        // Try each event type
         for (const eventType of eventTypes) {
-            logger.debug(`[EventPatterns] Testing ${eventType.type} patterns (${eventType.patterns.length} patterns)`);
+            const patterns = this.getEventPatterns(eventType);
             
-            for (let i = 0; i < eventType.patterns.length; i++) {
-                const patternObj = eventType.patterns[i];
+            if (this.config.enableDebugLogging) {
+                logger.debug(`[EventPatterns] Testing ${eventType} patterns (${patterns.length} patterns)`);
+            }
+            
+            for (let i = 0; i < patterns.length; i++) {
+                const patternObj = patterns[i];
+                if (!patternObj || !patternObj.pattern) continue;
+
                 const match = cleanText.match(patternObj.pattern);
                 
-                logger.debug(`[EventPatterns] Pattern ${i}: ${patternObj.pattern} -> ${match ? 'MATCH' : 'NO MATCH'}`);
+                if (this.config.enableDebugLogging) {
+                    logger.debug(`[EventPatterns] Pattern ${i} (${patternObj.description}): ${patternObj.originalPattern || patternObj.pattern} -> ${match ? 'MATCH' : 'NO MATCH'}`);
+                }
                 
                 if (match) {
-                    logger.debug(`[EventPatterns] MATCHED! Groups: [${match.slice(1).join(', ')}]`);
-                    return this.parseEventMatch(match, eventType.type, patternObj, i);
+                    if (this.config.enableDebugLogging) {
+                        logger.debug(`[EventPatterns] MATCHED! Groups: [${match.slice(1).join(', ')}]`);
+                    }
+                    return this.parseEventMatch(match, eventType, patternObj, i);
                 }
             }
         }
 
-        logger.debug(`[EventPatterns] No patterns matched for: "${cleanText}"`);
+        if (this.config.enableDebugLogging) {
+            logger.debug(`[EventPatterns] No patterns matched for: "${cleanText}"`);
+        }
         return null;
     }
 
@@ -251,109 +147,176 @@ class EventPatterns {
             raw: match[0],
             patternIndex: patternIndex,
             isCustomPattern: patternObj.custom || false,
-            groups: patternObj.groups || []
+            groups: patternObj.groups || [],
+            description: patternObj.description || 'No description'
         };
 
-        // Map match groups to named properties based on event type
-        switch (eventType) {
-            case 'join':
-                eventData.username = match[1];
-                if (match[2] && patternObj.groups.includes('rank')) {
-                    eventData.rank = match[2];
-                }
-                break;
-
-            case 'leave':
-                eventData.username = match[1];
-                if (match[2]) {
-                    eventData.reason = match[2];
-                }
-                break;
-
-            case 'kick':
-                eventData.username = match[1];
-                if (match[2]) {
-                    eventData.kickedBy = match[2];
-                }
-                if (match[3]) {
-                    eventData.reason = match[3];
-                }
-                break;
-
-            case 'promote':
-                if (patternObj.groups[0] === 'rank') {
-                    // Hypixel format: [MVP+] username was promoted...
-                    eventData.userRank = match[1];
-                    eventData.username = match[2];
-                    eventData.fromRank = match[3];
-                    eventData.toRank = match[4] || match[3];
-                } else if (patternObj.groups[0] === 'promoter') {
-                    eventData.promoter = match[1];
-                    eventData.username = match[2];
-                    eventData.toRank = match[3];
-                } else {
-                    eventData.username = match[1];
-                    eventData.fromRank = match[2];
-                    eventData.toRank = match[3] || match[2];
-                }
-                break;
-
-            case 'demote':
-                if (patternObj.groups[0] === 'rank') {
-                    // Hypixel format: [MVP+] username was demoted...
-                    eventData.userRank = match[1];
-                    eventData.username = match[2];
-                    eventData.fromRank = match[3];
-                    eventData.toRank = match[4] || match[3];
-                } else if (patternObj.groups[0] === 'demoter') {
-                    eventData.demoter = match[1];
-                    eventData.username = match[2];
-                    eventData.toRank = match[3];
-                } else {
-                    eventData.username = match[1];
-                    eventData.fromRank = match[2];
-                    eventData.toRank = match[3] || match[2];
-                }
-                break;
-
-            case 'invite':
-                eventData.inviter = match[1];
-                eventData.invited = match[2];
-                break;
-
-            case 'online':
-                if (match[2]) {
-                    eventData.count = parseInt(match[1]);
-                    eventData.membersList = match[2];
-                } else {
-                    eventData.membersList = match[1];
-                    eventData.count = this.countOnlineMembers(match[1]);
-                }
-                eventData.members = this.parseOnlineMembers(eventData.membersList);
-                break;
-
-            case 'level':
-                eventData.level = parseInt(match[1]);
-                break;
-
-            case 'motd':
-                eventData.changer = match[1];
-                eventData.motd = match[2];
-                break;
-
-            case 'misc':
-                eventData.changer = match[1];
-                if (match[2]) {
-                    if (patternObj.pattern.toString().includes('tag')) {
-                        eventData.newTag = match[2];
-                    } else if (patternObj.pattern.toString().includes('name')) {
-                        eventData.newName = match[2];
-                    }
-                }
-                break;
+        // Map match groups to named properties based on event type and groups definition
+        const groups = patternObj.groups || this.getDefaultGroups(eventType);
+        
+        for (let i = 0; i < groups.length && i + 1 < match.length; i++) {
+            const groupName = groups[i];
+            const groupValue = match[i + 1];
+            
+            if (groupValue !== undefined) {
+                eventData[groupName] = groupValue;
+            }
         }
 
-        return eventData;
+        // Apply event-specific processing
+        return this.processEventData(eventData, eventType, match);
+    }
+
+    /**
+     * Process event data based on event type
+     * @param {object} eventData - Base event data
+     * @param {string} eventType - Event type
+     * @param {Array} match - Regex match result
+     * @returns {object} Processed event data
+     */
+    processEventData(eventData, eventType, match) {
+        switch (eventType) {
+            case 'join':
+                return this.processJoinEvent(eventData, match);
+            case 'leave':
+                return this.processLeaveEvent(eventData, match);
+            case 'kick':
+                return this.processKickEvent(eventData, match);
+            case 'promote':
+                return this.processPromoteEvent(eventData, match);
+            case 'demote':
+                return this.processDemoteEvent(eventData, match);
+            case 'invite':
+                return this.processInviteEvent(eventData, match);
+            case 'online':
+                return this.processOnlineEvent(eventData, match);
+            case 'level':
+                return this.processLevelEvent(eventData, match);
+            case 'motd':
+                return this.processMotdEvent(eventData, match);
+            case 'misc':
+                return this.processMiscEvent(eventData, match);
+            default:
+                return eventData;
+        }
+    }
+
+    /**
+     * Process join event data
+     */
+    processJoinEvent(eventData, match) {
+        return {
+            ...eventData,
+            rank: eventData.rank || null,
+            welcomeMessage: this.generateWelcomeMessage(eventData.username)
+        };
+    }
+
+    /**
+     * Process leave event data
+     */
+    processLeaveEvent(eventData, match) {
+        return {
+            ...eventData,
+            reason: eventData.reason || null,
+            wasKicked: false
+        };
+    }
+
+    /**
+     * Process kick event data
+     */
+    processKickEvent(eventData, match) {
+        return {
+            ...eventData,
+            kickedBy: eventData.kicker || eventData.kickedBy || 'Unknown',
+            reason: eventData.reason || null,
+            wasKicked: true
+        };
+    }
+
+    /**
+     * Process promote event data
+     */
+    processPromoteEvent(eventData, match) {
+        return {
+            ...eventData,
+            fromRank: eventData.fromRank || 'Unknown',
+            toRank: eventData.toRank,
+            promoter: eventData.promoter || null,
+            isPromotion: true
+        };
+    }
+
+    /**
+     * Process demote event data
+     */
+    processDemoteEvent(eventData, match) {
+        return {
+            ...eventData,
+            fromRank: eventData.fromRank || 'Unknown',
+            toRank: eventData.toRank,
+            demoter: eventData.demoter || null,
+            isPromotion: false
+        };
+    }
+
+    /**
+     * Process invite event data
+     */
+    processInviteEvent(eventData, match) {
+        return {
+            ...eventData,
+            inviteAccepted: eventData.raw && eventData.raw.toLowerCase().includes('accepted')
+        };
+    }
+
+    /**
+     * Process online event data
+     */
+    processOnlineEvent(eventData, match) {
+        const membersList = eventData.membersList || '';
+        const members = this.parseOnlineMembers(membersList);
+        
+        return {
+            ...eventData,
+            count: eventData.count || members.length,
+            members: members,
+            onlineCount: members.length
+        };
+    }
+
+    /**
+     * Process level event data
+     */
+    processLevelEvent(eventData, match) {
+        const level = parseInt(eventData.level);
+        return {
+            ...eventData,
+            level: level,
+            previousLevel: Math.max(1, level - 1),
+            isLevelUp: true
+        };
+    }
+
+    /**
+     * Process MOTD event data
+     */
+    processMotdEvent(eventData, match) {
+        return {
+            ...eventData,
+            previousMotd: null // Could be tracked if needed
+        };
+    }
+
+    /**
+     * Process misc event data
+     */
+    processMiscEvent(eventData, match) {
+        return {
+            ...eventData,
+            changeType: this.determineChangeType(eventData)
+        };
     }
 
     /**
@@ -368,15 +331,15 @@ class EventPatterns {
 
         let cleaned = messageText;
 
-        // Remove color codes if not enabled (but this shouldn't truncate the message!)
+        // Remove color codes if not enabled
         if (!this.config.enableColorCodes) {
-            const beforeClean = cleaned;
-            cleaned = cleaned.replace(/§[0-9a-fklmnor]/g, '');
+            const colorCodePattern = this.patternLoader.getDefaults('colorCodes').all;
+            if (colorCodePattern) {
+                cleaned = cleaned.replace(new RegExp(colorCodePattern, 'g'), '');
+            }
         }
 
-        const result = cleaned.trim();
-        
-        return result;
+        return cleaned.trim();
     }
 
     /**
@@ -404,13 +367,33 @@ class EventPatterns {
     }
 
     /**
-     * Count online members from list
-     * @param {string} membersList - String of online members
-     * @returns {number} Number of online members
+     * Generate welcome message for new members
+     * @param {string} username - New member username
+     * @returns {string} Welcome message
      */
-    countOnlineMembers(membersList) {
-        const members = this.parseOnlineMembers(membersList);
-        return members.length;
+    generateWelcomeMessage(username) {
+        const welcomeMessages = [
+            `Welcome ${username} to the guild!`,
+            `${username} joined the guild family!`,
+            `Everyone welcome ${username}!`,
+            `The guild grows stronger with ${username}!`
+        ];
+
+        const randomIndex = Math.floor(Math.random() * welcomeMessages.length);
+        return welcomeMessages[randomIndex];
+    }
+
+    /**
+     * Determine change type for misc events
+     * @param {object} eventData - Event data
+     * @returns {string} Change type
+     */
+    determineChangeType(eventData) {
+        if (eventData.newTag) return 'tag_change';
+        if (eventData.newName) return 'name_change';
+        if (eventData.raw && eventData.raw.toLowerCase().includes('description')) return 'description_change';
+        if (eventData.raw && eventData.raw.toLowerCase().includes('settings')) return 'settings_change';
+        return 'unknown_change';
     }
 
     /**
@@ -423,7 +406,7 @@ class EventPatterns {
     }
 
     /**
-     * Get event type for message
+     * Get event type from message
      * @param {string} messageText - Message text
      * @returns {string|null} Event type or null
      */
@@ -435,56 +418,25 @@ class EventPatterns {
     /**
      * Add custom event pattern
      * @param {string} eventType - Event type
-     * @param {RegExp} pattern - Pattern regex
+     * @param {string} patternString - Pattern string
      * @param {Array} groups - Group names
      */
-    addCustomEventPattern(eventType, pattern, groups = []) {
-        if (!(pattern instanceof RegExp)) {
-            throw new Error('Pattern must be a RegExp object');
-        }
-
+    addCustomEventPattern(eventType, patternString, groups = []) {
+        // Add to PatternLoader
         const patternObj = {
-            pattern: pattern,
-            groups: groups,
-            custom: true
+            pattern: patternString,
+            groups: groups || this.getDefaultGroups(eventType),
+            custom: true,
+            description: `Runtime custom ${eventType} pattern`
         };
 
-        switch (eventType) {
-            case 'join':
-                this.joinPatterns.push(patternObj);
-                break;
-            case 'leave':
-                this.leavePatterns.push(patternObj);
-                break;
-            case 'kick':
-                this.kickPatterns.push(patternObj);
-                break;
-            case 'promote':
-                this.promotePatterns.push(patternObj);
-                break;
-            case 'demote':
-                this.demotePatterns.push(patternObj);
-                break;
-            case 'invite':
-                this.invitePatterns.push(patternObj);
-                break;
-            case 'online':
-                this.onlinePatterns.push(patternObj);
-                break;
-            case 'level':
-                this.levelPatterns.push(patternObj);
-                break;
-            case 'motd':
-                this.motdPatterns.push(patternObj);
-                break;
-            case 'misc':
-                this.miscPatterns.push(patternObj);
-                break;
-            default:
-                throw new Error(`Unknown event type: ${eventType}`);
-        }
+        this.patternLoader.addCustomPattern(this.serverType, 'events', eventType, patternObj);
+        
+        // Clear our cache
+        const cacheKey = `${this.serverType}-events-${eventType}`;
+        this.patternCache.delete(cacheKey);
 
-        logger.debug(`Added custom ${eventType} event pattern: ${pattern}`);
+        logger.debug(`Added custom ${eventType} event pattern: ${patternString}`);
     }
 
     /**
@@ -492,16 +444,10 @@ class EventPatterns {
      * @returns {number} Total number of patterns
      */
     getTotalPatternCount() {
-        return this.joinPatterns.length +
-               this.leavePatterns.length +
-               this.kickPatterns.length +
-               this.promotePatterns.length +
-               this.demotePatterns.length +
-               this.invitePatterns.length +
-               this.onlinePatterns.length +
-               this.levelPatterns.length +
-               this.motdPatterns.length +
-               this.miscPatterns.length;
+        const eventTypes = this.patternLoader.getEventTypes(this.serverType);
+        return eventTypes.reduce((total, eventType) => {
+            return total + this.getEventPatterns(eventType).length;
+        }, 0);
     }
 
     /**
@@ -509,20 +455,12 @@ class EventPatterns {
      * @returns {number} Number of custom patterns
      */
     getCustomPatternCount() {
-        const allPatterns = [
-            ...this.joinPatterns,
-            ...this.leavePatterns,
-            ...this.kickPatterns,
-            ...this.promotePatterns,
-            ...this.demotePatterns,
-            ...this.invitePatterns,
-            ...this.onlinePatterns,
-            ...this.levelPatterns,
-            ...this.motdPatterns,
-            ...this.miscPatterns
-        ];
-
-        return allPatterns.filter(p => p.custom).length;
+        const eventTypes = this.patternLoader.getEventTypes(this.serverType);
+        return eventTypes.reduce((total, eventType) => {
+            const patterns = this.getEventPatterns(eventType);
+            const customCount = patterns.filter(p => p.custom).length;
+            return total + customCount;
+        }, 0);
     }
 
     /**
@@ -532,11 +470,13 @@ class EventPatterns {
     updateConfig(newConfig) {
         const oldServerType = this.config.serverType;
         this.config = { ...this.config, ...newConfig };
-
-        // Reinitialize patterns if server type changed
-        if (oldServerType !== this.config.serverType) {
-            logger.debug(`Server type changed from ${oldServerType} to ${this.config.serverType}`);
-            this.initializeEventPatterns();
+        
+        // Update server type if changed
+        if (newConfig.serverType && newConfig.serverType !== oldServerType) {
+            this.serverType = newConfig.serverType;
+            this.validateServerSupport();
+            this.patternCache.clear(); // Clear cache since server changed
+            logger.debug(`Server type changed from ${oldServerType} to ${this.serverType}`);
         }
 
         logger.debug('EventPatterns configuration updated');
@@ -558,18 +498,60 @@ class EventPatterns {
     testEventMatching(messageText) {
         const results = {
             originalText: messageText,
+            serverType: this.serverType,
             cleanedText: this.cleanMessageForMatching(messageText),
             matchedEvent: this.matchEvent(messageText),
             eventType: this.getEventType(messageText),
-            isEvent: this.isGuildEvent(messageText)
+            isEvent: this.isGuildEvent(messageText),
+            availableEventTypes: this.patternLoader.getEventTypes(this.serverType),
+            totalPatterns: this.getTotalPatternCount()
         };
 
         if (results.matchedEvent) {
             results.matchedPattern = results.matchedEvent.patternIndex;
             results.groups = results.matchedEvent.groups;
+            results.description = results.matchedEvent.description;
         }
 
         return results;
+    }
+
+    /**
+     * Clear pattern cache
+     */
+    clearCache() {
+        this.patternCache.clear();
+        logger.debug('EventPatterns cache cleared');
+    }
+
+    /**
+     * Get pattern statistics
+     * @returns {object} Pattern statistics
+     */
+    getStatistics() {
+        const eventTypes = this.patternLoader.getEventTypes(this.serverType);
+        const stats = {
+            serverType: this.serverType,
+            eventTypes: eventTypes,
+            patternCounts: {},
+            totalPatterns: 0,
+            customPatterns: 0
+        };
+
+        eventTypes.forEach(eventType => {
+            const patterns = this.getEventPatterns(eventType);
+            const customCount = patterns.filter(p => p.custom).length;
+            
+            stats.patternCounts[eventType] = {
+                total: patterns.length,
+                custom: customCount
+            };
+            
+            stats.totalPatterns += patterns.length;
+            stats.customPatterns += customCount;
+        });
+
+        return stats;
     }
 }
 

@@ -209,6 +209,14 @@
                 "demote": []
             }
         },
+        "patterns": {
+            "reloadOnChange": false,
+            "cachePatterns": true,
+            "customPatternsEnabled": true,
+            "fallbackToVanilla": true,
+            "enableColorCodes": true,
+            "enableDebugLogging": false
+        },
         "messageQueue": {
             "maxSize": 1000,
             "processingInterval": 1000,

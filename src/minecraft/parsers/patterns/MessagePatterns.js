@@ -1,148 +1,120 @@
 // Specific Imports
-const logger = require("../../../shared/logger")
+const logger = require("../../../shared/logger");
+const { getPatternLoader } = require("../../../../config/PatternLoader.js");
 
 class MessagePatterns {
     constructor(config) {
         this.config = config;
+        this.patternLoader = getPatternLoader();
+        this.serverType = config.serverType || 'Hypixel';
 
-        this.guildPatterns = [];
-        this.officerPatterns = [];
-        this.privatePatterns = [];
-        this.partyPatterns = [];
-        this.systemPatterns = [];
-        this.ignorePatterns = [];
-
-        this.initializePatterns();
+        // Pattern cache for performance
+        this.patternCache = new Map();
+        
+        // Validate server support
+        this.validateServerSupport();
+        
+        logger.debug(`MessagePatterns initialized for server: ${this.serverType}`);
     }
 
     /**
-     * Initialize all message patterns based on server type
+     * Validate that the configured server is supported
      */
-    initializePatterns() {
-        // Guild chat patterns (with and without color codes) - UPDATED to exclude join/left events
-        this.guildPatterns = [
-            // Hypixel standard formats - exclude join/left messages
-            /^Guild > (?!.+(?:joined|left)\.$)(\w+): (.+)$/,
-            /^Guild > (?!.+(?:joined|left)\.$)\[.*?\] (\w+) \[.*?\]: (.+)$/,
-            /^Guild > (?!.+(?:joined|left)\.$)\[.*?\] (\w+): (.+)$/,
-            /^G > (?!.+(?:joined|left)\.$)(\w+): (.+)$/,
-            
-            // With color codes (§) - exclude join/left messages
-            /^§2Guild > §r(?!.+(?:joined|left)\.$)(\w+)§r: (.+)$/,
-            /^§aGuild > §r(?!.+(?:joined|left)\.$)(\w+)§r: (.+)$/,
-            /^§2G > §r(?!.+(?:joined|left)\.$)(\w+)§r: (.+)$/,
-            /^§aG > §r(?!.+(?:joined|left)\.$)(\w+)§r: (.+)$/,
-            
-            // With ranks - exclude join/left messages
-            /^Guild > (?!.+(?:joined|left)\.$)\[([^\]]+)\] (\w+) \[([^\]]+)\]: (.+)$/,
-            /^§2Guild > §r(?!.+(?:joined|left)\.$)\[([^\]§]+)§r\] §r(\w+)§r \[([^\]§]+)§r\]: (.+)$/,
-            
-            // Alternative formats
-            /^Guild Chat > (\w+): (.+)$/,
-            /^§2Guild Chat > §r(\w+)§r: (.+)$/
-        ];
-
-        // Officer chat patterns
-        this.officerPatterns = [
-            // Standard formats
-            /^Officer > (\w+): (.+)$/,
-            /^Officer > \[.*?\] (\w+) \[.*?\]: (.+)$/,
-            /^Officer > \[.*?\] (\w+): (.+)$/,
-            /^O > (\w+): (.+)$/,
-            
-            // With color codes
-            /^§3Officer > §r(\w+)§r: (.+)$/,
-            /^§3O > §r(\w+)§r: (.+)$/,
-            /^§bOfficer > §r(\w+)§r: (.+)$/,
-            
-            // With ranks
-            /^Officer > \[([^\]]+)\] (\w+) \[([^\]]+)\]: (.+)$/,
-            /^§3Officer > §r\[([^\]§]+)§r\] §r(\w+)§r \[([^\]§]+)§r\]: (.+)$/
-        ];
-
-        // Private message patterns
-        this.privatePatterns = [
-            // From messages
-            /^From (\w+): (.+)$/,
-            /^§dFrom (\w+)§r: (.+)$/,
-            /^§5From (\w+)§r: (.+)$/,
-            
-            // To messages  
-            /^To (\w+): (.+)$/,
-            /^§dTo (\w+)§r: (.+)$/,
-            /^§5To (\w+)§r: (.+)$/,
-            
-            // With ranks
-            /^From \[([^\]]+)\] (\w+): (.+)$/,
-            /^To \[([^\]]+)\] (\w+): (.+)$/
-        ];
-
-        // Party message patterns
-        this.partyPatterns = [
-            /^Party > (\w+): (.+)$/,
-            /^Party > \[.*?\] (\w+): (.+)$/,
-            /^P > (\w+): (.+)$/,
-            /^§9Party > §r(\w+)§r: (.+)$/,
-            /^§9P > §r(\w+)§r: (.+)$/
-        ];
-
-        // System message patterns
-        this.systemPatterns = [
-            // Game notifications
-            { pattern: /^(?:You are now|You have been|Welcome to|Game starting)/, type: 'game_notification' },
-            { pattern: /^(?:WINNER|FINAL KILL|Respawning in)/, type: 'game_result' },
-            { pattern: /^(?:\+\d+ coins|You earned|Level up)/, type: 'reward' },
-            { pattern: /^(?:Mystery Box|Daily Reward|Network Level)/, type: 'daily_reward' },
-            
-            // Server messages
-            { pattern: /^Server restart in/, type: 'server_restart' },
-            { pattern: /^You have been moved to/, type: 'server_move' },
-            { pattern: /^Connection throttled/, type: 'connection_issue' },
-            
-            // Guild system messages (these should be handled as events now, but keeping for fallback)
-            { pattern: /^(\w+) joined the guild!/, type: 'guild_join' },
-            { pattern: /^(\w+) left the guild/, type: 'guild_leave' },
-            { pattern: /^(\w+) was promoted/, type: 'guild_promotion' },
-            { pattern: /^(\w+) was demoted/, type: 'guild_demotion' },
-            { pattern: /^Online Members:/, type: 'guild_online' }
-        ];
-
-        // Messages to ignore (spam/advertisements)
-        this.ignorePatterns = [
-            // Game advertisements and spam
-            /^\[[\w\+]+\] [\w_]+: .*(?:join|game|party|lobby)/i,
-            /^[\w_]+: .*(?:www\.|discord\.gg|\.com|\.net|\.org)/i,
-            /^[\w_]+: .*(?:youtube|twitch|stream|video)/i,
-            
-            // Common spam phrases
-            /^[\w_]+: .*(?:sub|subscribe|follow|like|click)/i,
-            /^[\w_]+: .*(?:free|giveaway|win|prize)/i,
-            /^[\w_]+: .*(?:hack|cheat|exploit)/i,
-            
-            // Hypixel specific spam
-            /^([\w_]+): .*(?:coins|gems|skyblock|sb)/i,
-            /^([\w_]+): .*(?:carrying|boost|service)/i,
-            
-            // Friend/Guild advertisements
-            /^[\w_]+: .*(?:friend request|guild invite)/i,
-            /^[\w_]+: .*(?:looking for guild|lfg|recruiting)/i,
-            
-            // Auto-messages and bots
-            /^Bot>/,
-            /^([\w_]+): \[BOT\]/,
-            /^[\w_]+: .*(?:automatically|bot|script)/i
-        ];
-
-        // Custom patterns from configuration
-        if (this.config.customPatterns.guild) {
-            this.guildPatterns.push(...this.config.customPatterns.guild);
+    validateServerSupport() {
+        if (!this.patternLoader.isServerSupported(this.serverType)) {
+            logger.warn(`Server '${this.serverType}' not found in pattern configuration, falling back to Vanilla`);
+            this.serverType = 'Vanilla';
         }
-        if (this.config.customPatterns.officer) {
-            this.officerPatterns.push(...this.config.customPatterns.officer);
+    }
+
+    /**
+     * Get patterns for a specific message type
+     * @param {string} messageType - Message type (guild, officer, private, party)
+     * @returns {Array} Array of pattern objects
+     */
+    getMessagePatterns(messageType) {
+        const cacheKey = `${this.serverType}-messages-${messageType}`;
+        
+        if (this.patternCache.has(cacheKey)) {
+            return this.patternCache.get(cacheKey);
         }
-        if (this.config.customPatterns.ignore) {
-            this.ignorePatterns.push(...this.config.customPatterns.ignore);
+
+        const patterns = this.patternLoader.getPatterns(this.serverType, 'messages', messageType);
+        
+        // Add custom patterns from configuration if any
+        if (this.config.customPatterns && this.config.customPatterns[messageType]) {
+            const customPatterns = this.config.customPatterns[messageType].map(patternStr => ({
+                pattern: new RegExp(patternStr),
+                originalPattern: patternStr,
+                groups: this.getDefaultGroups(messageType),
+                custom: true,
+                description: `Custom ${messageType} pattern`
+            }));
+            patterns.push(...customPatterns);
         }
+
+        this.patternCache.set(cacheKey, patterns);
+        return patterns;
+    }
+
+    /**
+     * Get system patterns
+     * @returns {Array} Array of system pattern objects
+     */
+    getSystemPatterns() {
+        const cacheKey = `${this.serverType}-system`;
+        
+        if (this.patternCache.has(cacheKey)) {
+            return this.patternCache.get(cacheKey);
+        }
+
+        const patterns = this.patternLoader.getPatterns(this.serverType, 'system');
+        this.patternCache.set(cacheKey, patterns);
+        return patterns;
+    }
+
+    /**
+     * Get ignore patterns
+     * @returns {Array} Array of ignore pattern objects
+     */
+    getIgnorePatterns() {
+        const cacheKey = `${this.serverType}-ignore`;
+        
+        if (this.patternCache.has(cacheKey)) {
+            return this.patternCache.get(cacheKey);
+        }
+
+        const patterns = this.patternLoader.getPatterns(this.serverType, 'ignore');
+        
+        // Add custom ignore patterns from configuration if any
+        if (this.config.customPatterns && this.config.customPatterns.ignore) {
+            const customPatterns = this.config.customPatterns.ignore.map(patternStr => ({
+                pattern: new RegExp(patternStr, 'i'),
+                originalPattern: patternStr,
+                custom: true,
+                description: 'Custom ignore pattern'
+            }));
+            patterns.push(...customPatterns);
+        }
+
+        this.patternCache.set(cacheKey, patterns);
+        return patterns;
+    }
+
+    /**
+     * Get default groups for a message type
+     * @param {string} messageType - Message type
+     * @returns {Array} Default groups for the message type
+     */
+    getDefaultGroups(messageType) {
+        const defaultGroups = {
+            'guild': ['username', 'message'],
+            'officer': ['username', 'message'],
+            'private': ['username', 'message'],
+            'party': ['username', 'message']
+        };
+
+        return defaultGroups[messageType] || [];
     }
 
     /**
@@ -151,12 +123,15 @@ class MessagePatterns {
      * @returns {object|null} Match result or null
      */
     matchGuildMessage(messageText) {
-        for (let i = 0; i < this.guildPatterns.length; i++) {
-            const pattern = this.guildPatterns[i];
-            const match = messageText.match(pattern);
-            
+        const patterns = this.getMessagePatterns('guild');
+        
+        for (let i = 0; i < patterns.length; i++) {
+            const patternObj = patterns[i];
+            if (!patternObj || !patternObj.pattern) continue;
+
+            const match = messageText.match(patternObj.pattern);
             if (match) {
-                return this.parseGuildMatch(match, i);
+                return this.parseMatch(match, 'guild', patternObj, i);
             }
         }
         return null;
@@ -168,12 +143,15 @@ class MessagePatterns {
      * @returns {object|null} Match result or null
      */
     matchOfficerMessage(messageText) {
-        for (let i = 0; i < this.officerPatterns.length; i++) {
-            const pattern = this.officerPatterns[i];
-            const match = messageText.match(pattern);
-            
+        const patterns = this.getMessagePatterns('officer');
+        
+        for (let i = 0; i < patterns.length; i++) {
+            const patternObj = patterns[i];
+            if (!patternObj || !patternObj.pattern) continue;
+
+            const match = messageText.match(patternObj.pattern);
             if (match) {
-                return this.parseOfficerMatch(match, i);
+                return this.parseMatch(match, 'officer', patternObj, i);
             }
         }
         return null;
@@ -185,12 +163,23 @@ class MessagePatterns {
      * @returns {object|null} Match result or null
      */
     matchPrivateMessage(messageText) {
-        for (let i = 0; i < this.privatePatterns.length; i++) {
-            const pattern = this.privatePatterns[i];
-            const match = messageText.match(pattern);
-            
+        const patterns = this.getMessagePatterns('private');
+        
+        for (let i = 0; i < patterns.length; i++) {
+            const patternObj = patterns[i];
+            if (!patternObj || !patternObj.pattern) continue;
+
+            const match = messageText.match(patternObj.pattern);
             if (match) {
-                return this.parsePrivateMatch(match, i);
+                const result = this.parseMatch(match, 'private', patternObj, i);
+                // Add direction from pattern configuration
+                if (patternObj.direction) {
+                    result.direction = patternObj.direction;
+                } else {
+                    // Fallback to detecting from message content
+                    result.direction = match[0].toLowerCase().startsWith('from') ? 'from' : 'to';
+                }
+                return result;
             }
         }
         return null;
@@ -202,12 +191,15 @@ class MessagePatterns {
      * @returns {object|null} Match result or null
      */
     matchPartyMessage(messageText) {
-        for (let i = 0; i < this.partyPatterns.length; i++) {
-            const pattern = this.partyPatterns[i];
-            const match = messageText.match(pattern);
-            
+        const patterns = this.getMessagePatterns('party');
+        
+        for (let i = 0; i < patterns.length; i++) {
+            const patternObj = patterns[i];
+            if (!patternObj || !patternObj.pattern) continue;
+
+            const match = messageText.match(patternObj.pattern);
             if (match) {
-                return this.parsePartyMatch(match, i);
+                return this.parseMatch(match, 'party', patternObj, i);
             }
         }
         return null;
@@ -219,15 +211,19 @@ class MessagePatterns {
      * @returns {object|null} Match result or null
      */
     matchSystemMessage(messageText) {
-        for (const systemPattern of this.systemPatterns) {
-            const match = messageText.match(systemPattern.pattern);
-            
+        const patterns = this.getSystemPatterns();
+        
+        for (const patternObj of patterns) {
+            if (!patternObj || !patternObj.pattern) continue;
+
+            const match = messageText.match(patternObj.pattern);
             if (match) {
                 return {
-                    systemType: systemPattern.type,
-                    data: this.extractSystemData(match, systemPattern.type),
+                    systemType: patternObj.type || 'unknown',
+                    data: this.extractSystemData(match, patternObj.type || 'unknown'),
                     fullMatch: match[0],
-                    originalText: messageText
+                    originalText: messageText,
+                    description: patternObj.description
                 };
             }
         }
@@ -240,144 +236,68 @@ class MessagePatterns {
      * @returns {boolean} Whether message should be ignored
      */
     shouldIgnore(messageText) {
-        return this.ignorePatterns.some(pattern => pattern.test(messageText));
+        const patterns = this.getIgnorePatterns();
+        
+        return patterns.some(patternObj => {
+            if (!patternObj || !patternObj.pattern) return false;
+            return patternObj.pattern.test(messageText);
+        });
     }
 
-    // ==================== MATCH PARSING METHODS ====================
-
     /**
-     * Parse guild message match
+     * Parse message match result
      * @param {Array} match - Regex match result
-     * @param {number} patternIndex - Index of matched pattern
+     * @param {string} messageType - Type of message
+     * @param {object} patternObj - Pattern object that matched
+     * @param {number} patternIndex - Index of pattern
      * @returns {object} Parsed match data
      */
-    parseGuildMatch(match, patternIndex) {
-        // Different patterns have different group structures
-        if (match.length === 3) {
-            // Simple format: Guild > username: message
-            return {
-                username: match[1],
-                message: match[2],
-                rank: null,
-                patternIndex: patternIndex,
-                hasColorCodes: this.hasColorCodes(match[0])
-            };
-        } else if (match.length === 4) {
-            // Format with rank: Guild > [rank] username: message
-            return {
-                username: match[2],
-                message: match[3],
-                rank: match[1],
-                patternIndex: patternIndex,
-                hasColorCodes: this.hasColorCodes(match[0])
-            };
-        } else if (match.length === 5) {
-            // Complex format: Guild > [prefix] username [suffix]: message
-            return {
-                username: match[2],
-                message: match[4],
-                rank: match[1],
-                suffix: match[3],
-                patternIndex: patternIndex,
-                hasColorCodes: this.hasColorCodes(match[0])
-            };
-        }
-        
-        // Fallback
-        return {
-            username: match[1] || 'Unknown',
-            message: match[match.length - 1] || '',
-            rank: null,
+    parseMatch(match, messageType, patternObj, patternIndex) {
+        const groups = patternObj.groups || this.getDefaultGroups(messageType);
+        const result = {
             patternIndex: patternIndex,
-            hasColorCodes: this.hasColorCodes(match[0])
+            hasColorCodes: this.hasColorCodes(match[0]),
+            description: patternObj.description,
+            custom: patternObj.custom || false
         };
-    }
 
-    /**
-     * Parse officer message match
-     * @param {Array} match - Regex match result
-     * @param {number} patternIndex - Index of matched pattern
-     * @returns {object} Parsed match data
-     */
-    parseOfficerMatch(match, patternIndex) {
-        // Similar structure to guild messages
-        if (match.length === 3) {
-            return {
-                username: match[1],
-                message: match[2],
-                rank: null,
-                patternIndex: patternIndex,
-                hasColorCodes: this.hasColorCodes(match[0])
-            };
-        } else if (match.length >= 4) {
-            return {
-                username: match[2] || match[1],
-                message: match[match.length - 1],
-                rank: match[1],
-                patternIndex: patternIndex,
-                hasColorCodes: this.hasColorCodes(match[0])
-            };
+        // Map groups to result object
+        for (let i = 0; i < groups.length && i + 1 < match.length; i++) {
+            const groupName = groups[i];
+            const groupValue = match[i + 1];
+            
+            if (groupValue !== undefined) {
+                result[groupName] = groupValue;
+            }
         }
-        
-        return {
-            username: match[1] || 'Unknown',
-            message: match[match.length - 1] || '',
-            rank: null,
-            patternIndex: patternIndex,
-            hasColorCodes: this.hasColorCodes(match[0])
-        };
-    }
 
-    /**
-     * Parse private message match
-     * @param {Array} match - Regex match result
-     * @param {number} patternIndex - Index of matched pattern
-     * @returns {object} Parsed match data
-     */
-    parsePrivateMatch(match, patternIndex) {
-        const direction = match[0].toLowerCase().startsWith('from') ? 'from' : 'to';
-        
-        if (match.length === 3) {
-            return {
-                username: match[1],
-                message: match[2],
-                direction: direction,
-                rank: null,
-                patternIndex: patternIndex
-            };
-        } else if (match.length === 4) {
-            return {
-                username: match[2],
-                message: match[3],
-                direction: direction,
-                rank: match[1],
-                patternIndex: patternIndex
-            };
+        // Handle complex patterns with multiple rank groups
+        if (messageType === 'guild' || messageType === 'officer') {
+            // If we have rank1, rank2, use the first one as primary rank
+            if (result.rank1) {
+                result.rank = result.rank1;
+                result.secondaryRank = result.rank2 || null;
+            }
+            
+            // If we don't have a username but have multiple potential matches, use the best one
+            if (!result.username && match.length > 2) {
+                // Find the most likely username (usually the second or third match)
+                for (let i = 1; i < match.length; i++) {
+                    const potential = match[i];
+                    if (potential && /^\w+$/.test(potential) && potential.length > 2) {
+                        result.username = potential;
+                        break;
+                    }
+                }
+            }
+            
+            // Message is usually the last match
+            if (!result.message && match.length > 1) {
+                result.message = match[match.length - 1];
+            }
         }
-        
-        return {
-            username: match[1] || 'Unknown',
-            message: match[match.length - 1] || '',
-            direction: direction,
-            rank: null,
-            patternIndex: patternIndex
-        };
-    }
 
-    /**
-     * Parse party message match
-     * @param {Array} match - Regex match result
-     * @param {number} patternIndex - Index of matched pattern
-     * @returns {object} Parsed match data
-     */
-    parsePartyMatch(match, patternIndex) {
-        return {
-            username: match[1] || 'Unknown',
-            message: match[match.length - 1] || '',
-            rank: match.length > 3 ? match[1] : null,
-            patternIndex: patternIndex,
-            hasColorCodes: this.hasColorCodes(match[0])
-        };
+        return result;
     }
 
     /**
@@ -397,7 +317,9 @@ class MessagePatterns {
             case 'guild_leave':
             case 'guild_promotion':
             case 'guild_demotion':
-                data.username = match[1];
+                if (match[1]) {
+                    data.username = match[1];
+                }
                 break;
             
             case 'guild_online':
@@ -416,12 +338,23 @@ class MessagePatterns {
                     data.amount = parseInt(rewardMatch[1]);
                 }
                 break;
+
+            default:
+                // For other system types, try to extract any numbers or usernames
+                const numberMatch = match[0].match(/(\d+)/);
+                if (numberMatch) {
+                    data.number = parseInt(numberMatch[1]);
+                }
+                
+                const usernameMatch = match[0].match(/(\w{3,16})/);
+                if (usernameMatch) {
+                    data.possibleUsername = usernameMatch[1];
+                }
+                break;
         }
 
         return data;
     }
-
-    // ==================== UTILITY METHODS ====================
 
     /**
      * Check if text contains Minecraft color codes
@@ -429,40 +362,51 @@ class MessagePatterns {
      * @returns {boolean} Whether text has color codes
      */
     hasColorCodes(text) {
+        if (!text || typeof text !== 'string') {
+            return false;
+        }
+
+        const colorCodePattern = this.patternLoader.getDefaults('colorCodes').all;
+        if (colorCodePattern) {
+            return new RegExp(colorCodePattern).test(text);
+        }
+        
+        // Fallback pattern
         return /§[0-9a-fklmnor]/g.test(text);
     }
 
     /**
      * Add custom pattern to specific type
      * @param {string} type - Pattern type (guild, officer, private, party, ignore)
-     * @param {RegExp} pattern - Pattern to add
+     * @param {string} patternString - Pattern string
+     * @param {Array} groups - Group names
      */
-    addCustomPattern(type, pattern) {
-        if (!(pattern instanceof RegExp)) {
-            throw new Error('Pattern must be a RegExp object');
+    addCustomPattern(type, patternString, groups = []) {
+        let category = 'messages';
+        let subCategory = type;
+
+        // Handle special cases
+        if (type === 'ignore') {
+            category = 'ignore';
+            subCategory = null;
         }
 
-        switch (type) {
-            case 'guild':
-                this.guildPatterns.push(pattern);
-                break;
-            case 'officer':
-                this.officerPatterns.push(pattern);
-                break;
-            case 'private':
-                this.privatePatterns.push(pattern);
-                break;
-            case 'party':
-                this.partyPatterns.push(pattern);
-                break;
-            case 'ignore':
-                this.ignorePatterns.push(pattern);
-                break;
-            default:
-                throw new Error(`Unknown pattern type: ${type}`);
-        }
+        const patternObj = {
+            pattern: patternString,
+            groups: groups.length > 0 ? groups : this.getDefaultGroups(type),
+            custom: true,
+            description: `Runtime custom ${type} pattern`
+        };
 
-        logger.debug(`Added custom ${type} pattern: ${pattern}`);
+        this.patternLoader.addCustomPattern(this.serverType, category, subCategory, patternObj);
+        
+        // Clear our cache
+        const cacheKey = subCategory ? 
+            `${this.serverType}-${category}-${subCategory}` : 
+            `${this.serverType}-${category}`;
+        this.patternCache.delete(cacheKey);
+
+        logger.debug(`Added custom ${type} pattern: ${patternString}`);
     }
 
     /**
@@ -473,30 +417,116 @@ class MessagePatterns {
     testMessage(messageText) {
         const results = {
             originalText: messageText,
+            serverType: this.serverType,
             matches: {},
-            shouldIgnore: this.shouldIgnore(messageText)
+            shouldIgnore: this.shouldIgnore(messageText),
+            availableMessageTypes: this.patternLoader.getMessageTypes(this.serverType)
         };
 
-        // Test all pattern types
-        const guildMatch = this.matchGuildMessage(messageText);
-        if (guildMatch) results.matches.guild = guildMatch;
+        // Test all message pattern types
+        const messageTypes = ['guild', 'officer', 'private', 'party'];
+        
+        messageTypes.forEach(messageType => {
+            const match = this[`match${messageType.charAt(0).toUpperCase() + messageType.slice(1)}Message`](messageText);
+            if (match) {
+                results.matches[messageType] = match;
+            }
+        });
 
-        const officerMatch = this.matchOfficerMessage(messageText);
-        if (officerMatch) results.matches.officer = officerMatch;
-
-        const privateMatch = this.matchPrivateMessage(messageText);
-        if (privateMatch) results.matches.private = privateMatch;
-
-        const partyMatch = this.matchPartyMessage(messageText);
-        if (partyMatch) results.matches.party = partyMatch;
-
+        // Test system patterns
         const systemMatch = this.matchSystemMessage(messageText);
-        if (systemMatch) results.matches.system = systemMatch;
+        if (systemMatch) {
+            results.matches.system = systemMatch;
+        }
 
         results.matchCount = Object.keys(results.matches).length;
         results.hasMultipleMatches = results.matchCount > 1;
 
         return results;
+    }
+
+    /**
+     * Get pattern statistics
+     * @returns {object} Pattern statistics
+     */
+    getStatistics() {
+        const messageTypes = this.patternLoader.getMessageTypes(this.serverType);
+        const stats = {
+            serverType: this.serverType,
+            messageTypes: messageTypes,
+            patternCounts: {},
+            totalPatterns: 0,
+            customPatterns: 0
+        };
+
+        // Count message patterns
+        messageTypes.forEach(messageType => {
+            const patterns = this.getMessagePatterns(messageType);
+            const customCount = patterns.filter(p => p.custom).length;
+            
+            stats.patternCounts[messageType] = {
+                total: patterns.length,
+                custom: customCount
+            };
+            
+            stats.totalPatterns += patterns.length;
+            stats.customPatterns += customCount;
+        });
+
+        // Count system patterns
+        const systemPatterns = this.getSystemPatterns();
+        stats.patternCounts.system = {
+            total: systemPatterns.length,
+            custom: systemPatterns.filter(p => p.custom).length
+        };
+        stats.totalPatterns += systemPatterns.length;
+        stats.customPatterns += systemPatterns.filter(p => p.custom).length;
+
+        // Count ignore patterns
+        const ignorePatterns = this.getIgnorePatterns();
+        stats.patternCounts.ignore = {
+            total: ignorePatterns.length,
+            custom: ignorePatterns.filter(p => p.custom).length
+        };
+        stats.totalPatterns += ignorePatterns.length;
+        stats.customPatterns += ignorePatterns.filter(p => p.custom).length;
+
+        return stats;
+    }
+
+    /**
+     * Update configuration
+     * @param {object} newConfig - New configuration
+     */
+    updateConfig(newConfig) {
+        const oldServerType = this.config.serverType;
+        this.config = { ...this.config, ...newConfig };
+        
+        // Update server type if changed
+        if (newConfig.serverType && newConfig.serverType !== oldServerType) {
+            this.serverType = newConfig.serverType;
+            this.validateServerSupport();
+            this.patternCache.clear(); // Clear cache since server changed
+            logger.debug(`Server type changed from ${oldServerType} to ${this.serverType}`);
+        }
+
+        logger.debug('MessagePatterns configuration updated');
+    }
+
+    /**
+     * Get current configuration
+     * @returns {object} Current configuration
+     */
+    getConfig() {
+        return { ...this.config };
+    }
+
+    /**
+     * Clear pattern cache
+     */
+    clearCache() {
+        this.patternCache.clear();
+        logger.debug('MessagePatterns cache cleared');
     }
 }
 

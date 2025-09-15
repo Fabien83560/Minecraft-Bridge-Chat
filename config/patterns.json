@@ -1,0 +1,844 @@
+{
+  "servers": {
+    "Hypixel": {
+      "events": {
+        "join": [
+          {
+            "pattern": "^Guild > (\\w+) joined\\.$",
+            "groups": ["username"],
+            "description": "Hypixel guild join format"
+          },
+          {
+            "pattern": "^G > (\\w+) joined\\.$",
+            "groups": ["username"],
+            "description": "Hypixel short guild join format"
+          },
+          {
+            "pattern": "(\\w+) joined the guild!",
+            "groups": ["username"],
+            "description": "Standard join message"
+          },
+          {
+            "pattern": "(\\w+) has joined the guild",
+            "groups": ["username"],
+            "description": "Alternative join message"
+          },
+          {
+            "pattern": "Guild member (\\w+) joined",
+            "groups": ["username"],
+            "description": "Formal join message"
+          },
+          {
+            "pattern": "Welcome (\\w+) to the guild!",
+            "groups": ["username"],
+            "description": "Welcome join message"
+          },
+          {
+            "pattern": "§a(\\w+) joined the guild!§r",
+            "groups": ["username"],
+            "description": "Join message with color codes"
+          },
+          {
+            "pattern": "§2Guild member §r(\\w+)§r joined",
+            "groups": ["username"],
+            "description": "Formal join message with color codes"
+          },
+          {
+            "pattern": "\\[([^\\]]+)\\] (\\w+) joined the guild!",
+            "groups": ["rank", "username"],
+            "description": "Join message with rank prefix"
+          },
+          {
+            "pattern": "(\\w+) \\(([^)]+)\\) joined the guild!",
+            "groups": ["username", "rank"],
+            "description": "Join message with rank suffix"
+          }
+        ],
+        "leave": [
+          {
+            "pattern": "^Guild > (\\w+) left\\.$",
+            "groups": ["username"],
+            "description": "Hypixel guild leave format"
+          },
+          {
+            "pattern": "^G > (\\w+) left\\.$",
+            "groups": ["username"],
+            "description": "Hypixel short guild leave format"
+          },
+          {
+            "pattern": "(\\w+) left the guild",
+            "groups": ["username"],
+            "description": "Standard leave message"
+          },
+          {
+            "pattern": "(\\w+) has left the guild",
+            "groups": ["username"],
+            "description": "Alternative leave message"
+          },
+          {
+            "pattern": "Guild member (\\w+) left",
+            "groups": ["username"],
+            "description": "Formal leave message"
+          },
+          {
+            "pattern": "§c(\\w+) left the guild§r",
+            "groups": ["username"],
+            "description": "Leave message with color codes"
+          },
+          {
+            "pattern": "§4Guild member §r(\\w+)§r left",
+            "groups": ["username"],
+            "description": "Formal leave message with color codes"
+          },
+          {
+            "pattern": "(\\w+) left the guild \\(([^)]+)\\)",
+            "groups": ["username", "reason"],
+            "description": "Leave message with reason"
+          }
+        ],
+        "kick": [
+          {
+            "pattern": "(\\w+) was kicked from the guild by (\\w+)",
+            "groups": ["username", "kicker"],
+            "description": "Standard kick message"
+          },
+          {
+            "pattern": "(\\w+) was removed from the guild by (\\w+)",
+            "groups": ["username", "kicker"],
+            "description": "Alternative kick message"
+          },
+          {
+            "pattern": "(\\w+) was kicked from the guild",
+            "groups": ["username"],
+            "description": "Simple kick message"
+          },
+          {
+            "pattern": "§c(\\w+) was kicked from the guild by §r(\\w+)§r",
+            "groups": ["username", "kicker"],
+            "description": "Kick message with color codes"
+          },
+          {
+            "pattern": "(\\w+) was kicked from the guild by (\\w+): (.+)",
+            "groups": ["username", "kicker", "reason"],
+            "description": "Kick message with reason"
+          }
+        ],
+        "promote": [
+          {
+            "pattern": "^\\[([^\\]]+)\\] (\\w+) was promoted from (.+) to (.+)$",
+            "groups": ["rank", "username", "fromRank", "toRank"],
+            "description": "Hypixel promotion with rank prefix"
+          },
+          {
+            "pattern": "^\\[([^\\]]+)\\] (\\w+) was promoted to (.+)$",
+            "groups": ["rank", "username", "toRank"],
+            "description": "Hypixel promotion simple"
+          },
+          {
+            "pattern": "(\\w+) was promoted from (.+) to (.+)",
+            "groups": ["username", "fromRank", "toRank"],
+            "description": "Standard promotion message"
+          },
+          {
+            "pattern": "(\\w+) was promoted to (.+)",
+            "groups": ["username", "toRank"],
+            "description": "Simple promotion message"
+          },
+          {
+            "pattern": "(\\w+) is now (.+) in the guild",
+            "groups": ["username", "toRank"],
+            "description": "Alternative promotion message"
+          },
+          {
+            "pattern": "§a(\\w+) was promoted to §r(.+)§r",
+            "groups": ["username", "toRank"],
+            "description": "Promotion message with color codes"
+          },
+          {
+            "pattern": "§2(\\w+) is now §r(.+)§r in the guild",
+            "groups": ["username", "toRank"],
+            "description": "Alternative promotion with color codes"
+          },
+          {
+            "pattern": "(\\w+) promoted (\\w+) to (.+)",
+            "groups": ["promoter", "username", "toRank"],
+            "description": "Promotion message with promoter"
+          }
+        ],
+        "demote": [
+          {
+            "pattern": "^\\[([^\\]]+)\\] (\\w+) was demoted from (.+) to (.+)$",
+            "groups": ["rank", "username", "fromRank", "toRank"],
+            "description": "Hypixel demotion with rank prefix"
+          },
+          {
+            "pattern": "^\\[([^\\]]+)\\] (\\w+) was demoted to (.+)$",
+            "groups": ["rank", "username", "toRank"],
+            "description": "Hypixel demotion simple"
+          },
+          {
+            "pattern": "(\\w+) was demoted from (.+) to (.+)",
+            "groups": ["username", "fromRank", "toRank"],
+            "description": "Standard demotion message"
+          },
+          {
+            "pattern": "(\\w+) was demoted to (.+)",
+            "groups": ["username", "toRank"],
+            "description": "Simple demotion message"
+          },
+          {
+            "pattern": "§c(\\w+) was demoted to §r(.+)§r",
+            "groups": ["username", "toRank"],
+            "description": "Demotion message with color codes"
+          },
+          {
+            "pattern": "(\\w+) demoted (\\w+) to (.+)",
+            "groups": ["demoter", "username", "toRank"],
+            "description": "Demotion message with demoter"
+          }
+        ],
+        "invite": [
+          {
+            "pattern": "(\\w+) invited (\\w+) to the guild",
+            "groups": ["inviter", "invited"],
+            "description": "Standard invite message"
+          },
+          {
+            "pattern": "(\\w+) has invited (\\w+) to join the guild",
+            "groups": ["inviter", "invited"],
+            "description": "Alternative invite message"
+          },
+          {
+            "pattern": "§b(\\w+) invited §r(\\w+)§r to the guild",
+            "groups": ["inviter", "invited"],
+            "description": "Invite message with color codes"
+          },
+          {
+            "pattern": "(\\w+) accepted (\\w+)'s guild invitation",
+            "groups": ["invited", "inviter"],
+            "description": "Invite acceptance message"
+          }
+        ],
+        "online": [
+          {
+            "pattern": "Online Members: (.+)",
+            "groups": ["membersList"],
+            "description": "Standard online members list"
+          },
+          {
+            "pattern": "Guild Members Online \\((\\d+)\\): (.+)",
+            "groups": ["count", "membersList"],
+            "description": "Online members with count"
+          },
+          {
+            "pattern": "(\\d+) guild members online: (.+)",
+            "groups": ["count", "membersList"],
+            "description": "Alternative online members format"
+          },
+          {
+            "pattern": "§aOnline Members§r: (.+)",
+            "groups": ["membersList"],
+            "description": "Online members with color codes"
+          },
+          {
+            "pattern": "§2Guild Members Online \\((\\d+)\\)§r: (.+)",
+            "groups": ["count", "membersList"],
+            "description": "Online members with color codes and count"
+          }
+        ],
+        "level": [
+          {
+            "pattern": "The Guild has reached Level (\\d+)!",
+            "groups": ["level"],
+            "description": "Standard guild level up message"
+          },
+          {
+            "pattern": "Guild leveled up to Level (\\d+)!",
+            "groups": ["level"],
+            "description": "Alternative guild level up message"
+          },
+          {
+            "pattern": "Your guild is now level (\\d+)!",
+            "groups": ["level"],
+            "description": "Personal guild level up message"
+          },
+          {
+            "pattern": "§6The Guild has reached Level (\\d+)!§r",
+            "groups": ["level"],
+            "description": "Guild level up with color codes"
+          },
+          {
+            "pattern": "§eGuild leveled up to Level (\\d+)!§r",
+            "groups": ["level"],
+            "description": "Alternative level up with color codes"
+          }
+        ],
+        "motd": [
+          {
+            "pattern": "(\\w+) changed the guild MOTD to: (.+)",
+            "groups": ["changer", "motd"],
+            "description": "Standard MOTD change message"
+          },
+          {
+            "pattern": "Guild MOTD updated by (\\w+): (.+)",
+            "groups": ["changer", "motd"],
+            "description": "Alternative MOTD change message"
+          },
+          {
+            "pattern": "§b(\\w+) changed the guild MOTD to§r: (.+)",
+            "groups": ["changer", "motd"],
+            "description": "MOTD change with color codes"
+          }
+        ],
+        "misc": [
+          {
+            "pattern": "(\\w+) changed the guild tag to \\[([^\\]]+)\\]",
+            "groups": ["changer", "newTag"],
+            "description": "Guild tag change message"
+          },
+          {
+            "pattern": "(\\w+) renamed the guild to (.+)",
+            "groups": ["changer", "newName"],
+            "description": "Guild name change message"
+          },
+          {
+            "pattern": "(\\w+) updated the guild description",
+            "groups": ["changer"],
+            "description": "Guild description change message"
+          },
+          {
+            "pattern": "(\\w+) changed guild settings",
+            "groups": ["changer"],
+            "description": "Guild settings change message"
+          }
+        ]
+      },
+      "messages": {
+        "guild": [
+          {
+            "pattern": "^Guild > (?!.+(?:joined|left)\\.$)(\\w+): (.+)$",
+            "groups": ["username", "message"],
+            "description": "Hypixel standard guild chat (excluding join/left)"
+          },
+          {
+            "pattern": "^Guild > (?!.+(?:joined|left)\\.$)\\[.*?\\] (\\w+) \\[.*?\\]: (.+)$",
+            "groups": ["username", "message"],
+            "description": "Hypixel guild chat with double ranks"
+          },
+          {
+            "pattern": "^Guild > (?!.+(?:joined|left)\\.$)\\[.*?\\] (\\w+): (.+)$",
+            "groups": ["username", "message"],
+            "description": "Hypixel guild chat with rank"
+          },
+          {
+            "pattern": "^G > (?!.+(?:joined|left)\\.$)(\\w+): (.+)$",
+            "groups": ["username", "message"],
+            "description": "Hypixel short guild chat"
+          },
+          {
+            "pattern": "^§2Guild > §r(?!.+(?:joined|left)\\.$)(\\w+)§r: (.+)$",
+            "groups": ["username", "message"],
+            "description": "Hypixel guild chat with color codes"
+          },
+          {
+            "pattern": "^§aGuild > §r(?!.+(?:joined|left)\\.$)(\\w+)§r: (.+)$",
+            "groups": ["username", "message"],
+            "description": "Hypixel guild chat with alternative color codes"
+          },
+          {
+            "pattern": "^§2G > §r(?!.+(?:joined|left)\\.$)(\\w+)§r: (.+)$",
+            "groups": ["username", "message"],
+            "description": "Hypixel short guild chat with color codes"
+          },
+          {
+            "pattern": "^§aG > §r(?!.+(?:joined|left)\\.$)(\\w+)§r: (.+)$",
+            "groups": ["username", "message"],
+            "description": "Hypixel short guild chat with alternative color codes"
+          },
+          {
+            "pattern": "^Guild > (?!.+(?:joined|left)\\.$)\\[([^\\]]+)\\] (\\w+) \\[([^\\]]+)\\]: (.+)$",
+            "groups": ["rank1", "username", "rank2", "message"],
+            "description": "Hypixel guild chat with multiple ranks"
+          },
+          {
+            "pattern": "^§2Guild > §r(?!.+(?:joined|left)\\.$)\\[([^\\]§]+)§r\\] §r(\\w+)§r \\[([^\\]§]+)§r\\]: (.+)$",
+            "groups": ["rank1", "username", "rank2", "message"],
+            "description": "Hypixel guild chat with multiple ranks and color codes"
+          },
+          {
+            "pattern": "^Guild Chat > (\\w+): (.+)$",
+            "groups": ["username", "message"],
+            "description": "Alternative guild chat format"
+          },
+          {
+            "pattern": "^§2Guild Chat > §r(\\w+)§r: (.+)$",
+            "groups": ["username", "message"],
+            "description": "Alternative guild chat with color codes"
+          }
+        ],
+        "officer": [
+          {
+            "pattern": "^Officer > (\\w+): (.+)$",
+            "groups": ["username", "message"],
+            "description": "Standard officer chat"
+          },
+          {
+            "pattern": "^Officer > \\[.*?\\] (\\w+) \\[.*?\\]: (.+)$",
+            "groups": ["username", "message"],
+            "description": "Officer chat with double ranks"
+          },
+          {
+            "pattern": "^Officer > \\[.*?\\] (\\w+): (.+)$",
+            "groups": ["username", "message"],
+            "description": "Officer chat with rank"
+          },
+          {
+            "pattern": "^O > (\\w+): (.+)$",
+            "groups": ["username", "message"],
+            "description": "Short officer chat"
+          },
+          {
+            "pattern": "^§3Officer > §r(\\w+)§r: (.+)$",
+            "groups": ["username", "message"],
+            "description": "Officer chat with color codes"
+          },
+          {
+            "pattern": "^§3O > §r(\\w+)§r: (.+)$",
+            "groups": ["username", "message"],
+            "description": "Short officer chat with color codes"
+          },
+          {
+            "pattern": "^§bOfficer > §r(\\w+)§r: (.+)$",
+            "groups": ["username", "message"],
+            "description": "Officer chat with alternative color codes"
+          },
+          {
+            "pattern": "^Officer > \\[([^\\]]+)\\] (\\w+) \\[([^\\]]+)\\]: (.+)$",
+            "groups": ["rank1", "username", "rank2", "message"],
+            "description": "Officer chat with multiple ranks"
+          },
+          {
+            "pattern": "^§3Officer > §r\\[([^\\]§]+)§r\\] §r(\\w+)§r \\[([^\\]§]+)§r\\]: (.+)$",
+            "groups": ["rank1", "username", "rank2", "message"],
+            "description": "Officer chat with multiple ranks and color codes"
+          }
+        ],
+        "private": [
+          {
+            "pattern": "^From (\\w+): (.+)$",
+            "groups": ["username", "message"],
+            "direction": "from",
+            "description": "Incoming private message"
+          },
+          {
+            "pattern": "^§dFrom (\\w+)§r: (.+)$",
+            "groups": ["username", "message"],
+            "direction": "from",
+            "description": "Incoming private message with color codes"
+          },
+          {
+            "pattern": "^§5From (\\w+)§r: (.+)$",
+            "groups": ["username", "message"],
+            "direction": "from",
+            "description": "Incoming private message with alternative color codes"
+          },
+          {
+            "pattern": "^To (\\w+): (.+)$",
+            "groups": ["username", "message"],
+            "direction": "to",
+            "description": "Outgoing private message"
+          },
+          {
+            "pattern": "^§dTo (\\w+)§r: (.+)$",
+            "groups": ["username", "message"],
+            "direction": "to",
+            "description": "Outgoing private message with color codes"
+          },
+          {
+            "pattern": "^§5To (\\w+)§r: (.+)$",
+            "groups": ["username", "message"],
+            "direction": "to",
+            "description": "Outgoing private message with alternative color codes"
+          },
+          {
+            "pattern": "^From \\[([^\\]]+)\\] (\\w+): (.+)$",
+            "groups": ["rank", "username", "message"],
+            "direction": "from",
+            "description": "Incoming private message with rank"
+          },
+          {
+            "pattern": "^To \\[([^\\]]+)\\] (\\w+): (.+)$",
+            "groups": ["rank", "username", "message"],
+            "direction": "to",
+            "description": "Outgoing private message with rank"
+          }
+        ],
+        "party": [
+          {
+            "pattern": "^Party > (\\w+): (.+)$",
+            "groups": ["username", "message"],
+            "description": "Standard party chat"
+          },
+          {
+            "pattern": "^Party > \\[.*?\\] (\\w+): (.+)$",
+            "groups": ["username", "message"],
+            "description": "Party chat with rank"
+          },
+          {
+            "pattern": "^P > (\\w+): (.+)$",
+            "groups": ["username", "message"],
+            "description": "Short party chat"
+          },
+          {
+            "pattern": "^§9Party > §r(\\w+)§r: (.+)$",
+            "groups": ["username", "message"],
+            "description": "Party chat with color codes"
+          },
+          {
+            "pattern": "^§9P > §r(\\w+)§r: (.+)$",
+            "groups": ["username", "message"],
+            "description": "Short party chat with color codes"
+          }
+        ]
+      },
+      "system": [
+        {
+          "pattern": "^(?:You are now|You have been|Welcome to|Game starting)",
+          "type": "game_notification",
+          "description": "Game status notifications"
+        },
+        {
+          "pattern": "^(?:WINNER|FINAL KILL|Respawning in)",
+          "type": "game_result",
+          "description": "Game result messages"
+        },
+        {
+          "pattern": "^(?:\\+\\d+ coins|You earned|Level up)",
+          "type": "reward",
+          "description": "Reward messages"
+        },
+        {
+          "pattern": "^(?:Mystery Box|Daily Reward|Network Level)",
+          "type": "daily_reward",
+          "description": "Daily reward messages"
+        },
+        {
+          "pattern": "^Server restart in",
+          "type": "server_restart",
+          "description": "Server restart notification"
+        },
+        {
+          "pattern": "^You have been moved to",
+          "type": "server_move",
+          "description": "Server move notification"
+        },
+        {
+          "pattern": "^Connection throttled",
+          "type": "connection_issue",
+          "description": "Connection issue notification"
+        },
+        {
+          "pattern": "^(\\w+) joined the guild!",
+          "type": "guild_join",
+          "description": "Guild join system message (fallback)"
+        },
+        {
+          "pattern": "^(\\w+) left the guild",
+          "type": "guild_leave",
+          "description": "Guild leave system message (fallback)"
+        },
+        {
+          "pattern": "^(\\w+) was promoted",
+          "type": "guild_promotion",
+          "description": "Guild promotion system message (fallback)"
+        },
+        {
+          "pattern": "^(\\w+) was demoted",
+          "type": "guild_demotion",
+          "description": "Guild demotion system message (fallback)"
+        },
+        {
+          "pattern": "^Online Members:",
+          "type": "guild_online",
+          "description": "Guild online members list (fallback)"
+        }
+      ],
+      "ignore": [
+        {
+          "pattern": "^\\[[\\w\\+]+\\] [\\w_]+: .*(?:join|game|party|lobby)",
+          "flags": "i",
+          "description": "Game advertisements and spam"
+        },
+        {
+          "pattern": "^[\\w_]+: .*(?:www\\.|discord\\.gg|\\.com|\\.net|\\.org)",
+          "flags": "i",
+          "description": "URL spam"
+        },
+        {
+          "pattern": "^[\\w_]+: .*(?:youtube|twitch|stream|video)",
+          "flags": "i",
+          "description": "Media spam"
+        },
+        {
+          "pattern": "^[\\w_]+: .*(?:sub|subscribe|follow|like|click)",
+          "flags": "i",
+          "description": "Social media spam"
+        },
+        {
+          "pattern": "^[\\w_]+: .*(?:free|giveaway|win|prize)",
+          "flags": "i",
+          "description": "Giveaway spam"
+        },
+        {
+          "pattern": "^[\\w_]+: .*(?:hack|cheat|exploit)",
+          "flags": "i",
+          "description": "Cheat/hack spam"
+        },
+        {
+          "pattern": "^([\\w_]+): .*(?:coins|gems|skyblock|sb)",
+          "flags": "i",
+          "description": "Hypixel specific spam"
+        },
+        {
+          "pattern": "^([\\w_]+): .*(?:carrying|boost|service)",
+          "flags": "i",
+          "description": "Boosting service spam"
+        },
+        {
+          "pattern": "^[\\w_]+: .*(?:friend request|guild invite)",
+          "flags": "i",
+          "description": "Friend/guild advertisements"
+        },
+        {
+          "pattern": "^[\\w_]+: .*(?:looking for guild|lfg|recruiting)",
+          "flags": "i",
+          "description": "Guild recruitment spam"
+        },
+        {
+          "pattern": "^Bot>",
+          "flags": "none",
+          "description": "Bot messages"
+        },
+        {
+          "pattern": "^([\\w_]+): \\[BOT\\]",
+          "flags": "none",
+          "description": "Tagged bot messages"
+        },
+        {
+          "pattern": "^[\\w_]+: .*(?:automatically|bot|script)",
+          "flags": "i",
+          "description": "Automated messages"
+        }
+      ],
+      "detection": {
+        "guildChat": [
+          {
+            "pattern": "^Guild > ",
+            "description": "Standard Hypixel guild chat prefix"
+          },
+          {
+            "pattern": "^G > ",
+            "description": "Short Hypixel guild chat prefix"
+          },
+          {
+            "pattern": "^\\[Guild\\]",
+            "description": "Alternative guild chat prefix"
+          },
+          {
+            "pattern": "^§2Guild > ",
+            "description": "Guild chat prefix with color codes"
+          },
+          {
+            "pattern": "^§aGuild > ",
+            "description": "Guild chat prefix with alternative color codes"
+          },
+          {
+            "pattern": "^§2G > ",
+            "description": "Short guild chat prefix with color codes"
+          },
+          {
+            "pattern": "^§aG > ",
+            "description": "Short guild chat prefix with alternative color codes"
+          },
+          {
+            "pattern": "^Guild Chat > ",
+            "description": "Alternative guild chat format"
+          },
+          {
+            "pattern": "^§2Guild Chat > ",
+            "description": "Alternative guild chat with color codes"
+          }
+        ],
+        "officerChat": [
+          {
+            "pattern": "^Officer > ",
+            "description": "Standard officer chat prefix"
+          },
+          {
+            "pattern": "^O > ",
+            "description": "Short officer chat prefix"
+          },
+          {
+            "pattern": "^\\[Officer\\]",
+            "description": "Alternative officer chat prefix"
+          },
+          {
+            "pattern": "^§3Officer > ",
+            "description": "Officer chat prefix with color codes"
+          },
+          {
+            "pattern": "^§bOfficer > ",
+            "description": "Officer chat prefix with alternative color codes"
+          },
+          {
+            "pattern": "^§3O > ",
+            "description": "Short officer chat prefix with color codes"
+          },
+          {
+            "pattern": "^§bO > ",
+            "description": "Short officer chat prefix with alternative color codes"
+          }
+        ],
+        "guildEvent": [
+          {
+            "pattern": "joined the guild",
+            "description": "Member join events"
+          },
+          {
+            "pattern": "left the guild",
+            "description": "Member leave events"
+          },
+          {
+            "pattern": "was kicked from the guild",
+            "description": "Member kick events"
+          },
+          {
+            "pattern": "was removed from the guild",
+            "description": "Member removal events"
+          },
+          {
+            "pattern": "was promoted",
+            "description": "Member promotion events"
+          },
+          {
+            "pattern": "was demoted",
+            "description": "Member demotion events"
+          },
+          {
+            "pattern": "is now .+ in the guild",
+            "description": "Rank change events"
+          },
+          {
+            "pattern": "invited .+ to the guild",
+            "description": "Invitation events"
+          },
+          {
+            "pattern": "accepted .+ guild invitation",
+            "description": "Invitation acceptance events"
+          },
+          {
+            "pattern": "Guild has reached Level",
+            "description": "Guild level events"
+          },
+          {
+            "pattern": "Guild leveled up",
+            "description": "Guild level up events"
+          },
+          {
+            "pattern": "changed the guild MOTD",
+            "description": "MOTD change events"
+          },
+          {
+            "pattern": "Guild MOTD updated",
+            "description": "MOTD update events"
+          },
+          {
+            "pattern": "changed the guild tag",
+            "description": "Guild tag change events"
+          },
+          {
+            "pattern": "renamed the guild",
+            "description": "Guild name change events"
+          },
+          {
+            "pattern": "updated the guild description",
+            "description": "Guild description change events"
+          }
+        ],
+        "guildSystem": [
+          {
+            "pattern": "^Online Members:",
+            "description": "Online members list"
+          },
+          {
+            "pattern": "^Guild Members Online",
+            "description": "Guild members online message"
+          },
+          {
+            "pattern": "guild members online:",
+            "description": "Alternative online members format"
+          },
+          {
+            "pattern": "^Guild Name:",
+            "description": "Guild information messages"
+          },
+          {
+            "pattern": "^Guild Level:",
+            "description": "Guild level information"
+          },
+          {
+            "pattern": "^Guild Tag:",
+            "description": "Guild tag information"
+          },
+          {
+            "pattern": "^Guild MOTD:",
+            "description": "Guild MOTD information"
+          },
+          {
+            "pattern": "^You cannot use this command",
+            "description": "Command error messages"
+          },
+          {
+            "pattern": "^Guild .+ executed",
+            "description": "Command execution messages"
+          },
+          {
+            "pattern": "^You do not have permission",
+            "description": "Permission error messages"
+          }
+        ]
+      }
+    }
+  },
+  "defaults": {
+    "colorCodes": {
+      "all": "§[0-9a-fklmnor]",
+      "colors": "§[0-9a-f]",
+      "formatting": "§[klmnor]",
+      "ampersand": "&[0-9a-fklmnor]"
+    },
+    "ranks": {
+      "common": ["Member", "Officer", "Admin", "Owner", "VIP", "VIP+", "MVP", "MVP+", "MVP++"],
+      "hypixel": ["VIP", "VIP+", "MVP", "MVP+", "MVP++", "YOUTUBE", "PIG+++", "ADMIN"]
+    },
+    "messageTypes": {
+      "chat": ["guild", "officer", "private", "party"],
+      "events": ["join", "leave", "kick", "promote", "demote", "invite", "online", "level", "motd", "misc"],
+      "system": ["game_notification", "game_result", "reward", "daily_reward", "server_restart", "server_move", "connection_issue"]
+    }
+  },
+  "metadata": {
+    "version": "1.0.0",
+    "lastUpdated": "2025-01-15",
+    "description": "Centralized pattern configuration for Minecraft chat parsing",
+    "author": "Minecraft-Bridge-Chat",
+    "supportedServers": ["Hypixel"],
+    "patternFormat": {
+      "pattern": "Regular expression string",
+      "groups": "Array of group names that correspond to capture groups",
+      "flags": "Optional regex flags (i for case insensitive, g for global, etc.)",
+      "description": "Human readable description of what this pattern matches",
+      "direction": "Optional direction for private messages (from/to)"
+    }
+  }
+}

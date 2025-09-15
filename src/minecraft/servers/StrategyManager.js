@@ -1,6 +1,6 @@
 // Specific Imports
 const logger = require("../../shared/logger");
-const HypixelStrategy = require("./hypixelStrategy.js");
+const HypixelStrategy = require("./HypixelStrategy.js");
 
 class StrategyManager {
     constructor() {

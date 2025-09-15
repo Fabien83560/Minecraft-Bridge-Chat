@@ -1,10 +1,51 @@
 // Specific Imports
 const logger = require("../../shared/logger");
+const { getPatternLoader } = require("../../../config/PatternLoader.js");
 
 class HypixelStrategy {
     constructor() {
         this.name = "HypixelStrategy";
+        this.serverName = "Hypixel";
         this.limboDelay = 3000;
+        
+        this.patternLoader = getPatternLoader();
+        
+        // Cache for detection patterns
+        this.detectionCache = new Map();
+        
+        logger.debug(`${this.name} initialized with PatternLoader`);
+    }
+
+    /**
+     * Get detection patterns for a specific type
+     * @param {string} type - Detection type (guildChat, officerChat, guildEvent, guildSystem)
+     * @returns {Array} Array of detection pattern objects
+     */
+    getDetectionPatterns(type) {
+        if (this.detectionCache.has(type)) {
+            return this.detectionCache.get(type);
+        }
+
+        const patterns = this.patternLoader.getDetectionPatterns(this.serverName, type);
+        this.detectionCache.set(type, patterns);
+        
+        logger.debug(`Loaded ${patterns.length} detection patterns for ${type}`);
+        return patterns;
+    }
+
+    /**
+     * Test message against detection patterns
+     * @param {string} messageText - Message text to test
+     * @param {string} type - Detection type
+     * @returns {boolean} Whether message matches any pattern
+     */
+    testDetectionPatterns(messageText, type) {
+        const patterns = this.getDetectionPatterns(type);
+        
+        return patterns.some(patternObj => {
+            if (!patternObj || !patternObj.pattern) return false;
+            return patternObj.pattern.test(messageText);
+        });
     }
 
     async onConnect(bot, guildConfig) {
@@ -68,7 +109,7 @@ class HypixelStrategy {
     async onMessage(bot, message, guildConfig) {
         const messageText = message.toString();
 
-        // Check if this is a guild-related message
+        // Check if this is a guild-related message using detection patterns
         const guildMessageResult = this.processGuildMessage(messageText, guildConfig);
         
         if (guildMessageResult) {
@@ -83,13 +124,13 @@ class HypixelStrategy {
     }
 
     /**
-     * Process and classify guild messages
+     * Process and classify guild messages using PatternLoader
      * @param {string} messageText - Raw message text
      * @param {object} guildConfig - Guild configuration
      * @returns {object|null} Guild message data or null
      */
     processGuildMessage(messageText, guildConfig) {
-        // Guild Chat Messages
+        // Guild Chat Messages - use detection patterns
         if (this.isGuildChatMessage(messageText)) {
             return {
                 type: 'GUILD_CHAT',
@@ -100,7 +141,7 @@ class HypixelStrategy {
             };
         }
 
-        // Officer Chat Messages
+        // Officer Chat Messages - use detection patterns
         if (this.isOfficerChatMessage(messageText)) {
             return {
                 type: 'OFFICER_CHAT',
@@ -111,7 +152,7 @@ class HypixelStrategy {
             };
         }
 
-        // Guild Events (join, leave, kick, promote, etc.)
+        // Guild Events - use detection patterns
         if (this.isGuildEventMessage(messageText)) {
             return {
                 type: 'GUILD_EVENT',
@@ -122,7 +163,7 @@ class HypixelStrategy {
             };
         }
 
-        // Guild System Messages (online members, guild info, etc.)
+        // Guild System Messages - use detection patterns
         if (this.isGuildSystemMessage(messageText)) {
             return {
                 type: 'GUILD_SYSTEM',
@@ -137,117 +178,39 @@ class HypixelStrategy {
     }
 
     /**
-     * Check if message is guild chat
+     * Check if message is guild chat using detection patterns
      * @param {string} message - Message text
      * @returns {boolean} Whether message is guild chat
      */
     isGuildChatMessage(message) {
-        const guildChatPatterns = [
-            // Standard guild chat patterns
-            /^Guild > /,
-            /^G > /,
-            /^\[Guild\]/,
-            
-            // With color codes
-            /^§2Guild > /,
-            /^§aGuild > /,
-            /^§2G > /,
-            /^§aG > /,
-            
-            // Alternative formats
-            /^Guild Chat > /,
-            /^§2Guild Chat > /
-        ];
-        
-        return guildChatPatterns.some(pattern => pattern.test(message));
+        return this.testDetectionPatterns(message, 'guildChat');
     }
 
     /**
-     * Check if message is officer chat
+     * Check if message is officer chat using detection patterns
      * @param {string} message - Message text
      * @returns {boolean} Whether message is officer chat
      */
     isOfficerChatMessage(message) {
-        const officerChatPatterns = [
-            // Standard officer chat patterns
-            /^Officer > /,
-            /^O > /,
-            /^\[Officer\]/,
-            
-            // With color codes
-            /^§3Officer > /,
-            /^§bOfficer > /,
-            /^§3O > /,
-            /^§bO > /
-        ];
-        
-        return officerChatPatterns.some(pattern => pattern.test(message));
+        return this.testDetectionPatterns(message, 'officerChat');
     }
 
     /**
-     * Check if message is a guild event
+     * Check if message is a guild event using detection patterns
      * @param {string} message - Message text
      * @returns {boolean} Whether message is guild event
      */
     isGuildEventMessage(message) {
-        const guildEventPatterns = [
-            // Member events
-            /joined the guild/,
-            /left the guild/,
-            /was kicked from the guild/,
-            /was removed from the guild/,
-            
-            // Rank events
-            /was promoted/,
-            /was demoted/,
-            /is now .+ in the guild/,
-            
-            // Invite events
-            /invited .+ to the guild/,
-            /accepted .+ guild invitation/,
-            
-            // Guild level events
-            /Guild has reached Level/,
-            /Guild leveled up/,
-            
-            // MOTD events
-            /changed the guild MOTD/,
-            /Guild MOTD updated/,
-            
-            // Guild settings events
-            /changed the guild tag/,
-            /renamed the guild/,
-            /updated the guild description/
-        ];
-        
-        return guildEventPatterns.some(pattern => pattern.test(message));
+        return this.testDetectionPatterns(message, 'guildEvent');
     }
 
     /**
-     * Check if message is guild system message
+     * Check if message is guild system message using detection patterns
      * @param {string} message - Message text
      * @returns {boolean} Whether message is guild system message
      */
     isGuildSystemMessage(message) {
-        const guildSystemPatterns = [
-            // Online members
-            /^Online Members:/,
-            /^Guild Members Online/,
-            /guild members online:/,
-            
-            // Guild info
-            /^Guild Name:/,
-            /^Guild Level:/,
-            /^Guild Tag:/,
-            /^Guild MOTD:/,
-            
-            // Guild commands responses
-            /^You cannot use this command/,
-            /^Guild .+ executed/,
-            /^You do not have permission/
-        ];
-        
-        return guildSystemPatterns.some(pattern => pattern.test(message));
+        return this.testDetectionPatterns(message, 'guildSystem');
     }
 
     /**
@@ -256,6 +219,48 @@ class HypixelStrategy {
      * @returns {string} Event type
      */
     getGuildEventType(message) {
+        // Get event patterns to determine specific type
+        const eventTypes = this.patternLoader.getEventTypes(this.serverName);
+        
+        for (const eventType of eventTypes) {
+            const patterns = this.patternLoader.getPatterns(this.serverName, 'events', eventType);
+            
+            for (const patternObj of patterns) {
+                if (patternObj && patternObj.pattern && patternObj.pattern.test(message)) {
+                    return eventType;
+                }
+            }
+        }
+        
+        // Fallback to legacy detection method
+        return this.getLegacyEventType(message);
+    }
+
+    /**
+     * Get specific guild system type
+     * @param {string} message - Message text
+     * @returns {string} System type
+     */
+    getGuildSystemType(message) {
+        // Get system patterns to determine specific type
+        const systemPatterns = this.patternLoader.getPatterns(this.serverName, 'system');
+        
+        for (const patternObj of systemPatterns) {
+            if (patternObj && patternObj.pattern && patternObj.pattern.test(message)) {
+                return patternObj.type || 'unknown';
+            }
+        }
+        
+        // Fallback to legacy detection method
+        return this.getLegacySystemType(message);
+    }
+
+    /**
+     * Legacy event type detection (fallback)
+     * @param {string} message - Message text
+     * @returns {string} Event type
+     */
+    getLegacyEventType(message) {
         // Join events (including "Guild > username joined.")
         if (/joined\.?$/.test(message) || /joined the guild/.test(message)) return 'join';
         
@@ -275,27 +280,27 @@ class HypixelStrategy {
         if (/invited .+ to/.test(message)) return 'invite';
         
         // Guild level events
-        if (/Guild.*Level/.test(message)) return 'level_up';
+        if (/Guild.*Level/.test(message)) return 'level';
         
         // MOTD events
-        if (/MOTD/.test(message)) return 'motd_change';
+        if (/MOTD/.test(message)) return 'motd';
         
         // Guild tag events
-        if (/guild tag/.test(message)) return 'tag_change';
+        if (/guild tag/.test(message)) return 'misc';
         
         // Guild name events
-        if (/renamed the guild/.test(message)) return 'name_change';
+        if (/renamed the guild/.test(message)) return 'misc';
         
         return 'unknown';
     }
 
     /**
-     * Get specific guild system type
+     * Legacy system type detection (fallback)
      * @param {string} message - Message text
      * @returns {string} System type
      */
-    getGuildSystemType(message) {
-        if (/Online Members/.test(message)) return 'online_list';
+    getLegacySystemType(message) {
+        if (/Online Members/.test(message)) return 'guild_online';
         if (/Guild Name/.test(message)) return 'guild_info';
         if (/Guild Level/.test(message)) return 'guild_info';
         if (/Guild Tag/.test(message)) return 'guild_info';
@@ -324,6 +329,72 @@ class HypixelStrategy {
      */
     isSystemMessage(message) {
         return this.isGuildEventMessage(message) || this.isGuildSystemMessage(message);
+    }
+
+    /**
+     * Get strategy statistics
+     * @returns {object} Strategy statistics
+     */
+    getStatistics() {
+        const stats = {
+            name: this.name,
+            serverName: this.serverName,
+            detectionPatterns: {},
+            cacheSize: this.detectionCache.size
+        };
+
+        const detectionTypes = ['guildChat', 'officerChat', 'guildEvent', 'guildSystem'];
+        
+        detectionTypes.forEach(type => {
+            const patterns = this.getDetectionPatterns(type);
+            stats.detectionPatterns[type] = {
+                count: patterns.length,
+                descriptions: patterns.map(p => p.description).filter(d => d)
+            };
+        });
+
+        return stats;
+    }
+
+    /**
+     * Clear detection pattern cache
+     */
+    clearCache() {
+        this.detectionCache.clear();
+        logger.debug(`${this.name} detection pattern cache cleared`);
+    }
+
+    /**
+     * Test message against all detection patterns (for debugging)
+     * @param {string} messageText - Message to test
+     * @returns {object} Test results
+     */
+    testMessage(messageText) {
+        const results = {
+            message: messageText,
+            strategy: this.name,
+            serverName: this.serverName,
+            detectionResults: {},
+            guildRelated: false,
+            processedResult: null
+        };
+
+        const detectionTypes = ['guildChat', 'officerChat', 'guildEvent', 'guildSystem'];
+        
+        detectionTypes.forEach(type => {
+            const matches = this.testDetectionPatterns(messageText, type);
+            results.detectionResults[type] = matches;
+            
+            if (matches) {
+                results.guildRelated = true;
+            }
+        });
+
+        if (results.guildRelated) {
+            results.processedResult = this.processGuildMessage(messageText, { name: 'Test' });
+        }
+
+        return results;
     }
 
     wait(ms) {

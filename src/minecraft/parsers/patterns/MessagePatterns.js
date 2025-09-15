@@ -19,23 +19,23 @@ class MessagePatterns {
      * Initialize all message patterns based on server type
      */
     initializePatterns() {
-        // Guild chat patterns (with and without color codes)
+        // Guild chat patterns (with and without color codes) - UPDATED to exclude join/left events
         this.guildPatterns = [
-            // Hypixel standard formats
-            /^Guild > (\w+): (.+)$/,
-            /^Guild > \[.*?\] (\w+) \[.*?\]: (.+)$/,
-            /^Guild > \[.*?\] (\w+): (.+)$/,
-            /^G > (\w+): (.+)$/,
+            // Hypixel standard formats - exclude join/left messages
+            /^Guild > (?!.+(?:joined|left)\.$)(\w+): (.+)$/,
+            /^Guild > (?!.+(?:joined|left)\.$)\[.*?\] (\w+) \[.*?\]: (.+)$/,
+            /^Guild > (?!.+(?:joined|left)\.$)\[.*?\] (\w+): (.+)$/,
+            /^G > (?!.+(?:joined|left)\.$)(\w+): (.+)$/,
             
-            // With color codes (§)
-            /^§2Guild > §r(\w+)§r: (.+)$/,
-            /^§aGuild > §r(\w+)§r: (.+)$/,
-            /^§2G > §r(\w+)§r: (.+)$/,
-            /^§aG > §r(\w+)§r: (.+)$/,
+            // With color codes (§) - exclude join/left messages
+            /^§2Guild > §r(?!.+(?:joined|left)\.$)(\w+)§r: (.+)$/,
+            /^§aGuild > §r(?!.+(?:joined|left)\.$)(\w+)§r: (.+)$/,
+            /^§2G > §r(?!.+(?:joined|left)\.$)(\w+)§r: (.+)$/,
+            /^§aG > §r(?!.+(?:joined|left)\.$)(\w+)§r: (.+)$/,
             
-            // With ranks
-            /^Guild > \[([^\]]+)\] (\w+) \[([^\]]+)\]: (.+)$/,
-            /^§2Guild > §r\[([^\]§]+)§r\] §r(\w+)§r \[([^\]§]+)§r\]: (.+)$/,
+            // With ranks - exclude join/left messages
+            /^Guild > (?!.+(?:joined|left)\.$)\[([^\]]+)\] (\w+) \[([^\]]+)\]: (.+)$/,
+            /^§2Guild > §r(?!.+(?:joined|left)\.$)\[([^\]§]+)§r\] §r(\w+)§r \[([^\]§]+)§r\]: (.+)$/,
             
             // Alternative formats
             /^Guild Chat > (\w+): (.+)$/,
@@ -99,7 +99,7 @@ class MessagePatterns {
             { pattern: /^You have been moved to/, type: 'server_move' },
             { pattern: /^Connection throttled/, type: 'connection_issue' },
             
-            // Guild system messages
+            // Guild system messages (these should be handled as events now, but keeping for fallback)
             { pattern: /^(\w+) joined the guild!/, type: 'guild_join' },
             { pattern: /^(\w+) left the guild/, type: 'guild_leave' },
             { pattern: /^(\w+) was promoted/, type: 'guild_promotion' },
@@ -110,27 +110,27 @@ class MessagePatterns {
         // Messages to ignore (spam/advertisements)
         this.ignorePatterns = [
             // Game advertisements and spam
-            /^\[[\w\+]+\] \w+: .*(?:join|game|party|lobby)/i,
-            /^\w+: .*(?:www\.|discord\.gg|\.com|\.net|\.org)/i,
-            /^\w+: .*(?:youtube|twitch|stream|video)/i,
+            /^\[[\w\+]+\] [\w_]+: .*(?:join|game|party|lobby)/i,
+            /^[\w_]+: .*(?:www\.|discord\.gg|\.com|\.net|\.org)/i,
+            /^[\w_]+: .*(?:youtube|twitch|stream|video)/i,
             
             // Common spam phrases
-            /^\w+: .*(?:sub|subscribe|follow|like|click)/i,
-            /^\w+: .*(?:free|giveaway|win|prize)/i,
-            /^\w+: .*(?:hack|cheat|exploit)/i,
+            /^[\w_]+: .*(?:sub|subscribe|follow|like|click)/i,
+            /^[\w_]+: .*(?:free|giveaway|win|prize)/i,
+            /^[\w_]+: .*(?:hack|cheat|exploit)/i,
             
             // Hypixel specific spam
-            /^(\w+): .*(?:coins|gems|skyblock|sb)/i,
-            /^(\w+): .*(?:carrying|boost|service)/i,
+            /^([\w_]+): .*(?:coins|gems|skyblock|sb)/i,
+            /^([\w_]+): .*(?:carrying|boost|service)/i,
             
             // Friend/Guild advertisements
-            /^\w+: .*(?:friend request|guild invite)/i,
-            /^\w+: .*(?:looking for guild|lfg|recruiting)/i,
+            /^[\w_]+: .*(?:friend request|guild invite)/i,
+            /^[\w_]+: .*(?:looking for guild|lfg|recruiting)/i,
             
             // Auto-messages and bots
             /^Bot>/,
-            /^(\w+): \[BOT\]/,
-            /^\w+: .*(?:automatically|bot|script)/i
+            /^([\w_]+): \[BOT\]/,
+            /^[\w_]+: .*(?:automatically|bot|script)/i
         ];
 
         // Custom patterns from configuration

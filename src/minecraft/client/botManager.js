@@ -26,6 +26,12 @@ class BotManager extends EventEmitter {
 
         enabledGuilds.forEach(guild => {
             const connection = new MinecraftConnection(guild);
+            
+            // Set up callbacks for guild messages
+            connection.setMessageCallback((rawMessage, guildMessageData) => {
+                this.handleGuildMessage(guild.id, rawMessage, guildMessageData);
+            });
+            
             this.connections.set(guild.id, connection);
 
             logger.info(`Connection initialized for ${guild.name}`);
@@ -122,10 +128,53 @@ class BotManager extends EventEmitter {
             this.emit('error', error, guildId);
         });
 
-        // Monitor for messages
-        bot.on('message', (message) => {
-            this.handleMessage(guildId, message);
-        });
+        // Note: Message handling is now done via callbacks in connection.js
+        // We don't need to monitor messages here anymore
+    }
+
+    /**
+     * Handle guild messages that have been filtered by the strategy
+     * @param {string} guildId - Guild ID
+     * @param {object} rawMessage - Raw message from Minecraft
+     * @param {object} guildMessageData - Processed guild message data from strategy
+     */
+    handleGuildMessage(guildId, rawMessage, guildMessageData) {
+        const connection = this.connections.get(guildId);
+        if (!connection) {
+            logger.warn(`Received message for unknown guild: ${guildId}`);
+            return;
+        }
+
+        const guildConfig = connection.getGuildConfig();
+        
+        // Log that we're processing a confirmed guild message
+        logger.bridge(`[GUILD] [${guildConfig.name}] Processing confirmed guild message: ${guildMessageData.type}`);
+        
+        try {
+            // Process the guild message through the coordinator
+            const result = this.messageCoordinator.processMessage(rawMessage, guildConfig);
+            
+            // Add the strategy data to the result
+            result.strategyData = guildMessageData;
+            
+            // Log the processing result with [GUILD] prefix
+            logger.bridge(`[GUILD] [${guildConfig.name}] Message processed - Category: ${result.category}, Type: ${result.data.type || 'unknown'}`);
+            
+            // Emit the appropriate event based on category
+            if (result.category === 'message') {
+                logger.bridge(`[GUILD] [${guildConfig.name}] Emitting message event - Username: ${result.data.username || 'unknown'}, Message: "${result.data.message || 'N/A'}"`);
+                this.emit('message', result.data);
+            } else if (result.category === 'event') {
+                logger.bridge(`[GUILD] [${guildConfig.name}] Emitting event - Type: ${result.data.type}, Username: ${result.data.username || 'system'}`);
+                this.emit('event', result.data);
+            } else {
+                // Log other categories but still with [GUILD] prefix since it came from strategy
+                logger.bridge(`[GUILD] [${guildConfig.name}] Other category: ${result.category} - ${result.data.type || 'unknown'}`);
+            }
+            
+        } catch (error) {
+            logger.logError(error, `Error processing guild message for ${guildConfig.name}`);
+        }
     }
 
     scheduleReconnection(guildId) {
@@ -174,32 +223,6 @@ class BotManager extends EventEmitter {
         }, delay);
 
         this.reconnectTimers.set(guildId, timer);
-    }
-
-    handleMessage(guildId, message) {
-        const connection = this.connections.get(guildId);
-        if (!connection)
-            return;
-
-        const guildConfig = connection.getGuildConfig();
-        
-        // Log message processing
-        logger.bridge(`[${guildConfig.name}] Processing message through coordinator`);
-        
-        // Process message through coordinator
-        const result = this.messageCoordinator.processMessage(message, guildConfig);
-        
-        // Log the processing result
-        logger.bridge(`[${guildConfig.name}] Message processed - Category: ${result.category}, Type: ${result.data.type || 'unknown'}`);
-        
-        // Only emit relevant messages/events
-        if (result.category === 'message') {
-            logger.bridge(`[${guildConfig.name}] Emitting message event - Username: ${result.data.username || 'unknown'}`);
-            this.emit('message', result.data);
-        } else if (result.category === 'event') {
-            logger.bridge(`[${guildConfig.name}] Emitting event - Type: ${result.data.type}, Username: ${result.data.username || 'system'}`);
-            this.emit('event', result.data);
-        }
     }
 
     async stopAll() {

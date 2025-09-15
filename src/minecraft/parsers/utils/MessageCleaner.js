@@ -80,8 +80,8 @@ class MessageCleaner {
             // Apply cleaning steps in order
             messageText = this.removeMinecraftColorCodes(messageText);
             messageText = this.removeControlCharacters(messageText);
-            messageText = this.normalizeCharacters(messageText);
-            
+            messageText = this.normalizeCharacters(messageText);    
+
             if (this.config.stripUrls) {
                 messageText = this.removeUrls(messageText);
             }
@@ -92,7 +92,9 @@ class MessageCleaner {
             
             messageText = this.truncateMessage(messageText);
             
-            return messageText.trim();
+            const result = messageText.trim();
+            
+            return result;
             
         } catch (error) {
             logger.logError(error, 'Error cleaning message');
@@ -153,6 +155,13 @@ class MessageCleaner {
         // Handle JSON message objects from Minecraft client
         if (rawMessage && typeof rawMessage === 'object') {
             try {
+                // FIRST: Try toString() method - this often works for Minecraft message objects
+                const stringified = rawMessage.toString();
+                
+                if (stringified && stringified !== '[object Object]' && stringified.length > 4) {
+                    return stringified;
+                }
+                
                 // Try to extract from 'text' property
                 if (rawMessage.text) {
                     return rawMessage.text;
@@ -168,13 +177,30 @@ class MessageCleaner {
                         }
                     }
                     
-                    return fullText;
+                    if (fullText.length > 0) {
+                        return fullText;
+                    }
                 }
                 
-                // Try JSON.stringify as fallback
-                const stringified = JSON.stringify(rawMessage);
-                if (stringified && stringified !== '{}') {
-                    return stringified;
+                // Try other common message properties
+                if (rawMessage.message) {
+                    return rawMessage.message;
+                }
+                
+                if (rawMessage.content) {
+                    return rawMessage.content;
+                }
+                
+                // Try JSON.stringify as fallback - but clean it up
+                const jsonString = JSON.stringify(rawMessage);
+                
+                if (jsonString && jsonString !== '{}') {
+                    // Try to extract readable text from JSON
+                    const textMatch = jsonString.match(/"text":"([^"]+)"/);
+                    if (textMatch) {
+                        return textMatch[1];
+                    }
+                    return jsonString;
                 }
             } catch (error) {
                 logger.debug('Error extracting text from message object:', error.message);
@@ -182,7 +208,8 @@ class MessageCleaner {
         }
         
         // Final fallback - convert to string
-        return String(rawMessage || '');
+        const fallback = String(rawMessage || '');
+        return fallback;
     }
 
     /**

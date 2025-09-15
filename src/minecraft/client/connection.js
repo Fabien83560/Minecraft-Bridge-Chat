@@ -19,6 +19,10 @@ class MinecraftConnection {
         this._isConnecting = false;
         this.lastConnectionTime = null;
         this.connectionStartTime = null;
+
+        // Event callbacks
+        this.messageCallback = null;
+        this.eventCallback = null;
     }
 
     async connect() {
@@ -263,7 +267,7 @@ class MinecraftConnection {
             }
         });
 
-        // Message handling
+        // Message handling - ONLY GUILD MESSAGES NOW
         this._bot.on('message', (message) => {
             try {
                 this.handleMessage(message);
@@ -271,34 +275,49 @@ class MinecraftConnection {
                 logger.logError(error, `Message handling error for ${this._guildConfig.name}`);
             }
         });
+    }
 
-        // Chat processing
-        this._bot.on('messagestr', (message, messagePosition, jsonMsg) => {
-            try {
-                this.handleChatMessage(message, messagePosition, jsonMsg);
-            } catch (error) {
-                logger.logError(error, `Chat message handling error for ${this._guildConfig.name}`);
+    /**
+     * Handle incoming message and filter for guild messages only
+     * @param {object} message - Raw message from Minecraft
+     */
+    async handleMessage(message) {
+        try {
+            // Use strategy to check if this is a guild message and process it
+            const guildMessageData = await this.strategyManager.handleMessage(this._bot, message, this._guildConfig);
+            
+            if (guildMessageData) {
+                // This is a guild-related message, forward it for parsing
+                logger.debug(`[${this._guildConfig.name}] Guild message detected: ${guildMessageData.type}`);
+                
+                // Call the message callback if set (from BotManager)
+                if (this.messageCallback) {
+                    this.messageCallback(message, guildMessageData);
+                }
+            } else {
+                // Not a guild message, ignore it completely
+                logger.debug(`[${this._guildConfig.name}] Non-guild message ignored: ${message.toString().substring(0, 50)}...`);
             }
-        });
-    }
-
-    handleMessage(message) {
-        logger.bridge(`[${this._guildConfig.name}] Raw message received:`, message.toString());
-        
-        // Delegate message handling to the appropriate strategy
-        this.strategyManager.handleMessage(this._bot, message, this._guildConfig);
-    }
-
-    handleChatMessage(message, messagePosition, jsonMsg) {
-        // Log the chat message with position info
-        logger.bridge(`[${this._guildConfig.name}] Chat message (pos: ${messagePosition}):`, message);
-        
-        // Log JSON message data if available for debugging
-        if (jsonMsg) {
-            logger.debug(`[${this._guildConfig.name}] JSON message data:`, jsonMsg);
+            
+        } catch (error) {
+            logger.logError(error, `Error handling message for ${this._guildConfig.name}`);
         }
+    }
 
-        // TODO: Add chat parsing logic here
+    /**
+     * Set callback for guild messages
+     * @param {function} callback - Callback function for guild messages
+     */
+    setMessageCallback(callback) {
+        this.messageCallback = callback;
+    }
+
+    /**
+     * Set callback for guild events
+     * @param {function} callback - Callback function for guild events
+     */
+    setEventCallback(callback) {
+        this.eventCallback = callback;
     }
 
     async sendMessage(message) {

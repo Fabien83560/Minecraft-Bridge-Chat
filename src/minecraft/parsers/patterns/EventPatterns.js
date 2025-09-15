@@ -20,8 +20,12 @@ class EventPatterns {
     }
 
     initializeEventPatterns() {
-        // Guild member events
+        // Guild member events - Updated for Hypixel format
         this.joinPatterns = [
+            // Hypixel specific formats
+            { pattern: /^Guild > (\w+) joined\.$/, groups: ['username'] },
+            { pattern: /^G > (\w+) joined\.$/, groups: ['username'] },
+            
             // Standard join messages
             { pattern: /(\w+) joined the guild!/, groups: ['username'] },
             { pattern: /(\w+) has joined the guild/, groups: ['username'] },
@@ -38,6 +42,10 @@ class EventPatterns {
         ];
 
         this.leavePatterns = [
+            // Hypixel specific formats
+            { pattern: /^Guild > (\w+) left\.$/, groups: ['username'] },
+            { pattern: /^G > (\w+) left\.$/, groups: ['username'] },
+            
             // Standard leave messages
             { pattern: /(\w+) left the guild/, groups: ['username'] },
             { pattern: /(\w+) has left the guild/, groups: ['username'] },
@@ -65,6 +73,10 @@ class EventPatterns {
         ];
 
         this.promotePatterns = [
+            // Hypixel specific formats with rank prefixes
+            { pattern: /^\[([^\]]+)\] (\w+) was promoted from (.+) to (.+)$/, groups: ['rank', 'username', 'fromRank', 'toRank'] },
+            { pattern: /^\[([^\]]+)\] (\w+) was promoted to (.+)$/, groups: ['rank', 'username', 'toRank'] },
+            
             // Standard promotion messages
             { pattern: /(\w+) was promoted from (.+) to (.+)/, groups: ['username', 'fromRank', 'toRank'] },
             { pattern: /(\w+) was promoted to (.+)/, groups: ['username', 'toRank'] },
@@ -79,6 +91,10 @@ class EventPatterns {
         ];
 
         this.demotePatterns = [
+            // Hypixel specific formats with rank prefixes
+            { pattern: /^\[([^\]]+)\] (\w+) was demoted from (.+) to (.+)$/, groups: ['rank', 'username', 'fromRank', 'toRank'] },
+            { pattern: /^\[([^\]]+)\] (\w+) was demoted to (.+)$/, groups: ['rank', 'username', 'toRank'] },
+            
             // Standard demotion messages
             { pattern: /(\w+) was demoted from (.+) to (.+)/, groups: ['username', 'fromRank', 'toRank'] },
             { pattern: /(\w+) was demoted to (.+)/, groups: ['username', 'toRank'] },
@@ -183,6 +199,10 @@ class EventPatterns {
         // Clean message text
         const cleanText = this.cleanMessageForMatching(messageText);
         
+        // DEBUG: Log the exact message we're trying to match
+        logger.debug(`[EventPatterns] Trying to match: "${cleanText}"`);
+        logger.debug(`[EventPatterns] Message length: ${cleanText.length}`);
+        
         // Try each event type
         const eventTypes = [
             { type: 'join', patterns: this.joinPatterns },
@@ -198,16 +218,22 @@ class EventPatterns {
         ];
 
         for (const eventType of eventTypes) {
+            logger.debug(`[EventPatterns] Testing ${eventType.type} patterns (${eventType.patterns.length} patterns)`);
+            
             for (let i = 0; i < eventType.patterns.length; i++) {
                 const patternObj = eventType.patterns[i];
                 const match = cleanText.match(patternObj.pattern);
                 
+                logger.debug(`[EventPatterns] Pattern ${i}: ${patternObj.pattern} -> ${match ? 'MATCH' : 'NO MATCH'}`);
+                
                 if (match) {
+                    logger.debug(`[EventPatterns] MATCHED! Groups: [${match.slice(1).join(', ')}]`);
                     return this.parseEventMatch(match, eventType.type, patternObj, i);
                 }
             }
         }
 
+        logger.debug(`[EventPatterns] No patterns matched for: "${cleanText}"`);
         return null;
     }
 
@@ -255,7 +281,13 @@ class EventPatterns {
                 break;
 
             case 'promote':
-                if (patternObj.groups[0] === 'promoter') {
+                if (patternObj.groups[0] === 'rank') {
+                    // Hypixel format: [MVP+] username was promoted...
+                    eventData.userRank = match[1];
+                    eventData.username = match[2];
+                    eventData.fromRank = match[3];
+                    eventData.toRank = match[4] || match[3];
+                } else if (patternObj.groups[0] === 'promoter') {
                     eventData.promoter = match[1];
                     eventData.username = match[2];
                     eventData.toRank = match[3];
@@ -267,7 +299,13 @@ class EventPatterns {
                 break;
 
             case 'demote':
-                if (patternObj.groups[0] === 'demoter') {
+                if (patternObj.groups[0] === 'rank') {
+                    // Hypixel format: [MVP+] username was demoted...
+                    eventData.userRank = match[1];
+                    eventData.username = match[2];
+                    eventData.fromRank = match[3];
+                    eventData.toRank = match[4] || match[3];
+                } else if (patternObj.groups[0] === 'demoter') {
                     eventData.demoter = match[1];
                     eventData.username = match[2];
                     eventData.toRank = match[3];
@@ -330,12 +368,15 @@ class EventPatterns {
 
         let cleaned = messageText;
 
-        // Remove color codes if not enabled
+        // Remove color codes if not enabled (but this shouldn't truncate the message!)
         if (!this.config.enableColorCodes) {
+            const beforeClean = cleaned;
             cleaned = cleaned.replace(/§[0-9a-fklmnor]/g, '');
         }
 
-        return cleaned.trim();
+        const result = cleaned.trim();
+        
+        return result;
     }
 
     /**

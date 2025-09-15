@@ -4,7 +4,7 @@ const path = require('path');
 
 // Specific Imports
 const logger = require('./shared/logger');
-const Config = require("../config/index.js");
+const Config = require("./config/ConfigLoader.js");
 const MinecraftManager = require('./minecraft/index.js');
 const BridgeLocator = require("./bridgeLocator.js");
 

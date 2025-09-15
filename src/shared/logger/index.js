@@ -1,5 +1,5 @@
 const Logger = require('./logger');
-const Config = require('../../../config');
+const Config = require('../../config/ConfigLoader.js');
 
 let loggerInstance = null;
 

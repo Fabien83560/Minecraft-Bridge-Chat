@@ -3,7 +3,7 @@ const path = require('path');
 
 class Config {
     constructor() {
-        this.configPath = path.join(__dirname, 'settings.json');
+        this.configPath = path.join(__dirname, '../../config/settings.json');
         this.settings = null;
         this.isLoaded = false;
         

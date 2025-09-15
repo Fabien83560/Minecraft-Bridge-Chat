@@ -1,10 +1,10 @@
 const fs = require('fs');
 const path = require('path');
-const logger = require('../src/shared/logger');
+const logger = require('../shared/logger');
 
 class PatternLoader {
     constructor() {
-        this.patternsPath = path.join(__dirname, './patterns.json');
+        this.patternsPath = path.join(__dirname, '../../config/patterns.json');
         this.patterns = null;
         this.isLoaded = false;
         this.cache = new Map();

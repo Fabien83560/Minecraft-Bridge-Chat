@@ -54,6 +54,9 @@ class HypixelStrategy {
         // Wait for connection to stabilize
         await this.wait(this.limboDelay);
         
+        // Change Hypixel Language to detect all messages
+        await this.changeLanguage(bot, guildConfig);
+
         // Go to limbo to avoid disconnections
         await this.goToLimbo(bot, guildConfig);
     }
@@ -63,9 +66,33 @@ class HypixelStrategy {
         
         // Wait longer after reconnection
         await this.wait(this.limboDelay);
-        
+
+        // Change Hypixel Language to detect all messages
+        await this.changeLanguage(bot, guildConfig);
+
         // Always return to limbo after reconnection
         await this.goToLimbo(bot, guildConfig);
+    }
+
+    async changeLanguage(bot, guildConfig, retryCount = 0) {
+        try {
+            logger.minecraft(`🌌 Change Hypixel Language to English for ${guildConfig.name}`);
+
+            bot.chat(`/language English`);
+
+            await this.wait(1000);
+
+            logger.minecraft(`✅ Successfully change Hypixel Language to English`);
+        } catch (error) {
+            if (retryCount < 3) {
+                logger.minecraft(`⚠️ Failed to switch Hypixel Language, retrying... (${retryCount + 1}/3)`);
+                await this.wait(1000);
+                return this.changeLanguage(bot, guildConfig, retryCount + 1);
+            } else {
+                logger.logError(error, `Failed to switch Hypixel Language for ${guildConfig.name} after 3 retries`);
+                // No throw error
+            }
+        }
     }
 
     async goToLimbo(bot, guildConfig, retryCount = 0) {

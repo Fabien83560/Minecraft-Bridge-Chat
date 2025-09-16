@@ -24,14 +24,20 @@
           "leave": {
             "basic": "{username} left the guild",
             "withTag": "{username} {tag} left the guild",
-            "withSourceTag": "[{sourceGuildTag}] {username} left the guild",
-            "withBothTags": "[{sourceGuildTag}] {username} {tag} left the guild"
+            "withSourceTag": "{username} left the guild",
+            "withBothTags": "{username} {tag} left the guild"
+          },
+          "welcome": {
+            "basic": "Welcome to {username}",
+            "withTag": "Welcome to {username} in the {tag}",
+            "withSourceTag": "Welcome to {username} in the {tag}",
+            "withBothTags": "Welcome to {username} in the {tag}"
           },
           "kick": {
-            "basic": "{username} was kicked from the guild{kickedBy}",
-            "withTag": "{username} {tag} was kicked from the guild{kickedBy}",
-            "withSourceTag": "[{sourceGuildTag}] {username} was kicked from the guild{kickedBy}",
-            "withBothTags": "[{sourceGuildTag}] {username} {tag} was kicked from the guild{kickedBy}"
+            "basic": "{username} was kicked from the guild",
+            "withTag": "{username} {tag} was kicked from the guild",
+            "withSourceTag": "[{sourceGuildTag}] {username} was kicked from the guild",
+            "withBothTags": "[{sourceGuildTag}] {username} {tag} was kicked from the guild"
           },
           "promote": {
             "basic": "{username} was promoted to {toRank}",
@@ -111,10 +117,10 @@
             "withBothTags": "**[{sourceGuildTag}]** **{username}** `{tag}` **left the guild** 👋"
           },
           "kick": {
-            "basic": "**{username} was kicked{kickedBy}** 🚫",
-            "withTag": "**{username}** `{tag}` **was kicked{kickedBy}** 🚫",
-            "withSourceTag": "**[{sourceGuildTag}]** **{username} was kicked{kickedBy}** 🚫",
-            "withBothTags": "**[{sourceGuildTag}]** **{username}** `{tag}` **was kicked{kickedBy}** 🚫"
+            "basic": "**{username} was kicked** 🚫",
+            "withTag": "**{username}** `{tag}` **was kicked** 🚫",
+            "withSourceTag": "**[{sourceGuildTag}]** **{username} was kicked** 🚫",
+            "withBothTags": "**[{sourceGuildTag}]** **{username}** `{tag}` **was kicked** 🚫"
           },
           "promote": {
             "basic": "**{username} was promoted to {toRank}** ⬆️",
@@ -167,7 +173,6 @@
       "level": "1",
       "changer": "Player",
       "motd": "Welcome to our guild!",
-      "kickedBy": "",
       "reason": ""
     },
     "colors": {

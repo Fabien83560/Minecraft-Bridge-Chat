@@ -161,7 +161,7 @@ class HypixelStrategy {
     }
 
     /**
-     * Check if a message was sent by our own bot (to avoid infinite loops)
+     * IMPROVED: Check if a message was sent by our own bot (to avoid infinite loops)
      * @param {string} messageText - Message text to check
      * @param {object} guildConfig - Guild configuration
      * @returns {boolean} Whether this message was sent by our own bot
@@ -169,23 +169,65 @@ class HypixelStrategy {
     isOwnBotMessage(messageText, guildConfig) {
         const botUsername = guildConfig.account.username;
         
-        // Extract username from guild chat patterns
-        // Pattern examples:
-        // "Guild > [MVP+] BotUsername [Mod]: message"
-        // "Guild > BotUsername: message"
-        // "G > BotUsername: message"
-        
+        if (!botUsername) {
+            logger.warn(`[${guildConfig.name}] No bot username configured, cannot filter own messages`);
+            return false;
+        }
+
+        // Extract username from various guild chat patterns
         const guildPatterns = [
-            /^Guild > (?:\[.*?\]\s+)?(\w+)(?:\s+\[.*?\])?: (.+)$/,  // Guild > [rank] username [rank]: message
-            /^G > (?:\[.*?\]\s+)?(\w+)(?:\s+\[.*?\])?: (.+)$/,      // G > [rank] username [rank]: message
-            /^§2Guild > §r(?:\[.*?\]\s+)?(\w+)§r(?:\s+\[.*?\])?: (.+)$/, // With color codes
-            /^§aGuild > §r(?:\[.*?\]\s+)?(\w+)§r(?:\s+\[.*?\])?: (.+)$/  // With alternative color codes
+            // Standard patterns: "Guild > [rank] username [rank]: message"
+            /^Guild > (?:\[.*?\]\s+)?(\w+)(?:\s+\[.*?\])?\s*:\s*(.+)$/,
+            /^G > (?:\[.*?\]\s+)?(\w+)(?:\s+\[.*?\])?\s*:\s*(.+)$/,
+            
+            // With color codes
+            /^§[0-9a-fklmnor]Guild > §[0-9a-fklmnor](?:\[.*?\]\s+)?(\w+)§[0-9a-fklmnor](?:\s+\[.*?\])?\s*:\s*(.+)$/,
+            /^§[0-9a-fklmnor]G > §[0-9a-fklmnor](?:\[.*?\]\s+)?(\w+)§[0-9a-fklmnor](?:\s+\[.*?\])?\s*:\s*(.+)$/,
+            
+            // Alternative formats
+            /^Guild Chat > (?:\[.*?\]\s+)?(\w+)(?:\s+\[.*?\])?\s*:\s*(.+)$/,
+            /^§[0-9a-fklmnor]Guild Chat > §[0-9a-fklmnor](?:\[.*?\]\s+)?(\w+)§[0-9a-fklmnor](?:\s+\[.*?\])?\s*:\s*(.+)$/,
+            
+            // Officer chat patterns
+            /^Officer > (?:\[.*?\]\s+)?(\w+)(?:\s+\[.*?\])?\s*:\s*(.+)$/,
+            /^O > (?:\[.*?\]\s+)?(\w+)(?:\s+\[.*?\])?\s*:\s*(.+)$/,
+            /^§[0-9a-fklmnor]Officer > §[0-9a-fklmnor](?:\[.*?\]\s+)?(\w+)§[0-9a-fklmnor](?:\s+\[.*?\])?\s*:\s*(.+)$/,
+            /^§[0-9a-fklmnor]O > §[0-9a-fklmnor](?:\[.*?\]\s+)?(\w+)§[0-9a-fklmnor](?:\s+\[.*?\])?\s*:\s*(.+)$/
         ];
         
         for (const pattern of guildPatterns) {
             const match = messageText.match(pattern);
-            if (match && match[1] === botUsername) {
-                return true;
+            if (match && match[1]) {
+                const extractedUsername = match[1].trim();
+                const extractedMessage = match[2] ? match[2].trim() : '';
+                
+                // Case-insensitive comparison
+                if (extractedUsername.toLowerCase() === botUsername.toLowerCase()) {
+                    logger.debug(`[${guildConfig.name}] Detected own bot message from ${extractedUsername}: "${extractedMessage.substring(0, 50)}${extractedMessage.length > 50 ? '...' : ''}"`);
+                    return true;
+                }
+            }
+        }
+        
+        // Additional check: look for inter-guild patterns that might indicate bot relaying
+        // Check if the message contains patterns typical of inter-guild relaying
+        const interGuildPatterns = [
+            // Messages that look like "BotName: OriginalUser: message"
+            /^(\w+):\s*(\w+):\s*(.+)$/,
+            // Messages that look like repeated username chains
+            /^(\w+):\s*\1:\s*(.+)$/,
+        ];
+        
+        for (const pattern of interGuildPatterns) {
+            const match = messageText.match(pattern);
+            if (match) {
+                // If we detect a potential inter-guild relay pattern in our own message,
+                // it's likely our bot relaying, so we should ignore it
+                const potentialBotName = match[1];
+                if (potentialBotName && potentialBotName.toLowerCase() === botUsername.toLowerCase()) {
+                    logger.debug(`[${guildConfig.name}] Detected potential inter-guild relay from bot: "${messageText.substring(0, 50)}${messageText.length > 50 ? '...' : ''}"`);
+                    return true;
+                }
             }
         }
         
@@ -259,21 +301,6 @@ class HypixelStrategy {
         }
 
         return null;
-    }
-
-    /**
-     * Check if a message type should be processed for inter-guild transfer
-     * @param {string} messageType - Message type
-     * @returns {boolean} Whether message should be processed for inter-guild
-     */
-    shouldProcessForInterGuild(messageType) {
-        const interGuildTypes = [
-            'GUILD_CHAT',
-            'OFFICER_CHAT', 
-            'GUILD_EVENT'
-        ];
-        
-        return interGuildTypes.includes(messageType);
     }
 
     /**

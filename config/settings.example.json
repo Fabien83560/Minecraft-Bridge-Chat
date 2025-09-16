@@ -101,8 +101,7 @@
             "showTags": true,
             "showSourceTag": true,
             "shareableEvents": [
-                "join",
-                "leave",
+                "welcome",
                 "kick",
                 "promote",
                 "demote",

@@ -226,13 +226,18 @@ class MessageFormatter {
             case 'join':
                 // Join events don't need extra variables usually
                 break;
+            
+            case 'disconnect':
+                break;
                 
             case 'leave':
                 variables.reason = eventData.reason ? ` (${eventData.reason})` : '';
                 break;
-                
+            
+            case 'welcome':
+                break;
+
             case 'kick':
-                variables.kickedBy = eventData.kickedBy ? ` by ${eventData.kickedBy}` : '';
                 variables.reason = eventData.reason ? ` for: ${eventData.reason}` : '';
                 break;
                 

@@ -65,7 +65,9 @@ class EventPatterns {
     getDefaultGroups(eventType) {
         const defaultGroups = {
             'join': ['username'],
+            'disconnect': ['username'],
             'leave': ['username'],
+            'welcome': ['username'],
             'kick': ['username', 'kicker'],
             'promote': ['username', 'toRank'],
             'demote': ['username', 'toRank'],
@@ -178,8 +180,12 @@ class EventPatterns {
         switch (eventType) {
             case 'join':
                 return this.processJoinEvent(eventData, match);
+            case 'disconnect':
+                return this.processDisconnect(eventData, match);
             case 'leave':
                 return this.processLeaveEvent(eventData, match);
+            case 'welcome':
+                return this.processWelcomeEvent(eventData, match);
             case 'kick':
                 return this.processKickEvent(eventData, match);
             case 'promote':
@@ -207,9 +213,18 @@ class EventPatterns {
     processJoinEvent(eventData, match) {
         return {
             ...eventData,
-            rank: eventData.rank || null,
-            welcomeMessage: this.generateWelcomeMessage(eventData.username)
+            rank: eventData.rank || null
         };
+    }
+
+    /**
+     * Process disconnect event data
+     */
+    processDisconnect(eventData, match) {
+        return {
+            ...eventData,
+            rank: eventData.rank || null
+        }
     }
 
     /**
@@ -224,12 +239,20 @@ class EventPatterns {
     }
 
     /**
+     * Process welcome event data
+     */
+    processWelcomeEvent(eventData, match) {
+        return {
+            ...eventData,
+        }
+    }
+
+    /**
      * Process kick event data
      */
     processKickEvent(eventData, match) {
         return {
             ...eventData,
-            kickedBy: eventData.kicker || eventData.kickedBy || 'Unknown',
             reason: eventData.reason || null,
             wasKicked: true
         };
@@ -364,23 +387,6 @@ class EventPatterns {
                     .trim();
             })
             .filter(member => member.length > 0);
-    }
-
-    /**
-     * Generate welcome message for new members
-     * @param {string} username - New member username
-     * @returns {string} Welcome message
-     */
-    generateWelcomeMessage(username) {
-        const welcomeMessages = [
-            `Welcome ${username} to the guild!`,
-            `${username} joined the guild family!`,
-            `Everyone welcome ${username}!`,
-            `The guild grows stronger with ${username}!`
-        ];
-
-        const randomIndex = Math.floor(Math.random() * welcomeMessages.length);
-        return welcomeMessages[randomIndex];
     }
 
     /**

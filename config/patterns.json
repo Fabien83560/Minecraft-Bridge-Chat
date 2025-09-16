@@ -14,6 +14,25 @@
             "description": "Hypixel short guild join format"
           },
           {
+            "pattern": "§2Guild member §r(\\w+)§r joined",
+            "groups": ["username"],
+            "description": "Formal join message with color codes"
+          }
+        ],
+        "disconnect": [
+          {
+            "pattern": "^Guild > (\\w+) left\\.$",
+            "groups": ["username"],
+            "description": "Hypixel guild leave format"
+          },
+          {
+            "pattern": "^G > (\\w+) left\\.$",
+            "groups": ["username"],
+            "description": "Hypixel short guild leave format"
+          }
+        ],
+        "welcome": [
+          {
             "pattern": "(\\w+) joined the guild!",
             "groups": ["username"],
             "description": "Standard join message"
@@ -24,24 +43,9 @@
             "description": "Alternative join message"
           },
           {
-            "pattern": "Guild member (\\w+) joined",
-            "groups": ["username"],
-            "description": "Formal join message"
-          },
-          {
-            "pattern": "Welcome (\\w+) to the guild!",
-            "groups": ["username"],
-            "description": "Welcome join message"
-          },
-          {
             "pattern": "§a(\\w+) joined the guild!§r",
             "groups": ["username"],
             "description": "Join message with color codes"
-          },
-          {
-            "pattern": "§2Guild member §r(\\w+)§r joined",
-            "groups": ["username"],
-            "description": "Formal join message with color codes"
           },
           {
             "pattern": "\\[([^\\]]+)\\] (\\w+) joined the guild!",
@@ -56,16 +60,6 @@
         ],
         "leave": [
           {
-            "pattern": "^Guild > (\\w+) left\\.$",
-            "groups": ["username"],
-            "description": "Hypixel guild leave format"
-          },
-          {
-            "pattern": "^G > (\\w+) left\\.$",
-            "groups": ["username"],
-            "description": "Hypixel short guild leave format"
-          },
-          {
             "pattern": "(\\w+) left the guild",
             "groups": ["username"],
             "description": "Standard leave message"
@@ -76,19 +70,9 @@
             "description": "Alternative leave message"
           },
           {
-            "pattern": "Guild member (\\w+) left",
-            "groups": ["username"],
-            "description": "Formal leave message"
-          },
-          {
             "pattern": "§c(\\w+) left the guild§r",
             "groups": ["username"],
             "description": "Leave message with color codes"
-          },
-          {
-            "pattern": "§4Guild member §r(\\w+)§r left",
-            "groups": ["username"],
-            "description": "Formal leave message with color codes"
           },
           {
             "pattern": "(\\w+) left the guild \\(([^)]+)\\)",

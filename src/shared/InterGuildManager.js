@@ -19,12 +19,20 @@ class InterGuildManager {
         this.messageQueue = [];
         this.isProcessingQueue = false;
 
+        this.messageHashes = new Map(); // hash -> { timestamp, count, guilds }
+        this.duplicateDetectionWindow = 30000; // 30 seconds
+        this.maxDuplicatesPerWindow = 2; // Maximum 2 identical messages per window
+        this.messageHistory = new Map(); // guildId -> recent messages
+        this.historySize = 10; // Keep last 10 messages per guild
+
         // Statistics
         this.stats = {
             messagesProcessed: 0,
             eventsProcessed: 0,
             messagesDropped: 0,
             rateLimitHits: 0,
+            duplicatesDropped: 0,
+            loopsDetected: 0,
             errors: 0
         };
 
@@ -47,10 +55,13 @@ class InterGuildManager {
             // Start message queue processor
             if (this.interGuildConfig.enabled) {
                 this.startQueueProcessor();
-                logger.info('✅ InterGuildManager initialized and enabled');
+                logger.info('✅ InterGuildManager initialized and enabled with anti-loop protection');
             } else {
                 logger.info('🔒 InterGuildManager initialized but disabled');
             }
+
+            // Start cleanup interval for anti-loop protection
+            this.startCleanupInterval();
 
         } catch (error) {
             logger.logError(error, 'Failed to initialize InterGuildManager');
@@ -76,6 +87,11 @@ class InterGuildManager {
         }
 
         try {
+            if (this.isMessageLoopOrDuplicate(messageData, sourceGuildConfig)) {
+                this.stats.loopsDetected++;
+                return;
+            }
+
             // Get all enabled guilds except the source
             const allGuilds = this.config.getEnabledGuilds();
             const targetGuilds = allGuilds.filter(guild => guild.id !== sourceGuildConfig.id);
@@ -93,6 +109,8 @@ class InterGuildManager {
             }
 
             logger.bridge(`[INTER-GUILD] Processing message from ${sourceGuildConfig.name} to ${targetGuilds.length} target guilds`);
+
+            this.trackMessage(messageData, sourceGuildConfig);
 
             // Process each target guild
             for (const targetGuildConfig of targetGuilds) {
@@ -112,6 +130,157 @@ class InterGuildManager {
             logger.logError(error, `Error processing inter-guild message from ${sourceGuildConfig.name}`);
             this.stats.errors++;
         }
+    }
+
+    /**
+     * NEW: Check if message is a loop or duplicate
+     * @param {object} messageData - Message data
+     * @param {object} sourceGuildConfig - Source guild configuration
+     * @returns {boolean} Whether message should be dropped as loop/duplicate
+     */
+    isMessageLoopOrDuplicate(messageData, sourceGuildConfig) {
+        if (!messageData.message || !messageData.username) {
+            return false;
+        }
+
+        const message = messageData.message.trim();
+        const username = messageData.username;
+
+        // Pattern 1: Check for obvious relay patterns
+        const relayPatterns = [
+            /^(\w+):\s*(.+)$/, // "User: message"
+            /^(\w+):\s*\1:\s*(.+)$/, // "User: User: message"
+            /^(\w+):\s*(\w+):\s*(.+)$/ // "User1: User2: message"
+        ];
+
+        for (const pattern of relayPatterns) {
+            if (pattern.test(message)) {
+                logger.debug(`[${sourceGuildConfig.name}] Detected relay pattern in message: "${message.substring(0, 50)}..."`);
+                return true;
+            }
+        }
+
+        // Pattern 2: Check message history for this guild
+        const guildHistory = this.messageHistory.get(sourceGuildConfig.id) || [];
+        
+        // Check if this exact message was sent recently
+        const recentDuplicate = guildHistory.find(historyItem => 
+            historyItem.message === message && 
+            historyItem.username === username &&
+            (Date.now() - historyItem.timestamp) < this.duplicateDetectionWindow
+        );
+
+        if (recentDuplicate) {
+            logger.debug(`[${sourceGuildConfig.name}] Detected recent duplicate message from ${username}`);
+            return true;
+        }
+
+        // Pattern 3: Check for message hash duplicates across guilds
+        const messageHash = this.generateMessageHash(message, username);
+        const hashData = this.messageHashes.get(messageHash);
+
+        if (hashData) {
+            const timeSinceFirst = Date.now() - hashData.timestamp;
+            
+            if (timeSinceFirst < this.duplicateDetectionWindow) {
+                hashData.count++;
+                hashData.guilds.add(sourceGuildConfig.id);
+                
+                if (hashData.count > this.maxDuplicatesPerWindow) {
+                    this.stats.duplicatesDropped++;
+                    logger.debug(`[${sourceGuildConfig.name}] Message hash duplicate detected (count: ${hashData.count})`);
+                    return true;
+                }
+            }
+        } else {
+            // First time seeing this message hash
+            this.messageHashes.set(messageHash, {
+                timestamp: Date.now(),
+                count: 1,
+                guilds: new Set([sourceGuildConfig.id])
+            });
+        }
+
+        return false;
+    }
+
+    /**
+     * NEW: Track message for loop detection
+     * @param {object} messageData - Message data
+     * @param {object} sourceGuildConfig - Source guild configuration
+     */
+    trackMessage(messageData, sourceGuildConfig) {
+        const guildHistory = this.messageHistory.get(sourceGuildConfig.id) || [];
+        
+        // Add current message to history
+        guildHistory.push({
+            message: messageData.message.trim(),
+            username: messageData.username,
+            timestamp: Date.now()
+        });
+
+        // Keep only recent messages
+        if (guildHistory.length > this.historySize) {
+            guildHistory.shift();
+        }
+
+        this.messageHistory.set(sourceGuildConfig.id, guildHistory);
+    }
+
+    /**
+     * NEW: Generate hash for message content
+     * @param {string} message - Message content
+     * @param {string} username - Username
+     * @returns {string} Message hash
+     */
+    generateMessageHash(message, username) {
+        // Simple hash combining username and message
+        const combined = `${username}:${message}`.toLowerCase();
+        let hash = 0;
+        
+        for (let i = 0; i < combined.length; i++) {
+            const char = combined.charCodeAt(i);
+            hash = ((hash << 5) - hash) + char;
+            hash = hash & hash; // Convert to 32-bit integer
+        }
+        
+        return hash.toString();
+    }
+
+    /**
+     * NEW: Start cleanup interval for anti-loop protection
+     */
+    startCleanupInterval() {
+        setInterval(() => {
+            this.cleanupAntiLoopData();
+        }, 60000); // Clean up every minute
+    }
+
+    /**
+     * NEW: Clean up old anti-loop data
+     */
+    cleanupAntiLoopData() {
+        const now = Date.now();
+        const cutoff = now - this.duplicateDetectionWindow;
+
+        // Clean up message hashes
+        for (const [hash, data] of this.messageHashes.entries()) {
+            if (data.timestamp < cutoff) {
+                this.messageHashes.delete(hash);
+            }
+        }
+
+        // Clean up message history
+        for (const [guildId, history] of this.messageHistory.entries()) {
+            const filteredHistory = history.filter(item => item.timestamp > cutoff);
+            if (filteredHistory.length > 0) {
+                this.messageHistory.set(guildId, filteredHistory);
+            } else {
+                this.messageHistory.delete(guildId);
+            }
+        }
+
+        logger.debug(`Anti-loop cleanup: ${this.messageHashes.size} hashes, ${this.messageHistory.size} guild histories`);
     }
 
     /**
@@ -379,7 +548,7 @@ class InterGuildManager {
      */
     shouldShareEvent(eventType) {
         const shareableEvents = this.interGuildConfig.shareableEvents || [
-            'join', 'leave', 'kick', 'promote', 'demote', 'level', 'motd'
+            'welcome', 'disconnect', 'kick', 'promote', 'demote', 'level', 'motd'
         ];
 
         return shareableEvents.includes(eventType);
@@ -420,6 +589,12 @@ class InterGuildManager {
             queueSize: this.messageQueue.length,
             rateLimiterSize: this.rateLimiter.size,
             isProcessingQueue: this.isProcessingQueue,
+            antiLoop: {
+                messageHashes: this.messageHashes.size,
+                guildHistories: this.messageHistory.size,
+                duplicatesDropped: this.stats.duplicatesDropped,
+                loopsDetected: this.stats.loopsDetected
+            },
             config: {
                 enabled: this.interGuildConfig.enabled,
                 officerToGuildChat: this.interGuildConfig.officerToGuildChat,
@@ -443,6 +618,15 @@ class InterGuildManager {
     clearQueue() {
         this.messageQueue.length = 0;
         logger.debug('InterGuildManager message queue cleared');
+    }
+
+    /**
+     * Clear anti-loop data
+     */
+    clearAntiLoopData() {
+        this.messageHashes.clear();
+        this.messageHistory.clear();
+        logger.debug('InterGuildManager anti-loop data cleared');
     }
 
     /**

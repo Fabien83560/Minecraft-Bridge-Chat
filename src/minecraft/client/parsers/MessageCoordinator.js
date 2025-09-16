@@ -38,7 +38,7 @@ class MessageCoordinator {
         // Try to parse as chat message
         const chatData = this.chatParser.parseMessage(rawMessage, guildConfig);
         if (chatData.type === 'guild_chat') {
-            // ADDITIONAL CHECK: Verify this isn't our own bot message (defense in depth)
+            // ENHANCED CHECK: Verify this isn't our own bot message (defense in depth)
             if (this.isOwnBotMessage(chatData, guildConfig)) {
                 logger.debug(`[GUILD] [${guildConfig.name}] MessageCoordinator filtering own bot message from ${chatData.username}`);
                 return {
@@ -47,6 +47,21 @@ class MessageCoordinator {
                         type: 'own_bot_message',
                         reason: 'Message sent by our own bot',
                         username: chatData.username,
+                        raw: messageText
+                    }
+                };
+            }
+
+            // ADDITIONAL CHECK: Look for inter-guild relay patterns
+            if (this.isInterGuildRelayMessage(chatData, guildConfig)) {
+                logger.debug(`[GUILD] [${guildConfig.name}] MessageCoordinator filtering potential inter-guild relay from ${chatData.username}`);
+                return {
+                    category: 'ignored',
+                    data: {
+                        type: 'inter_guild_relay',
+                        reason: 'Message appears to be an inter-guild relay',
+                        username: chatData.username,
+                        message: chatData.message,
                         raw: messageText
                     }
                 };
@@ -81,7 +96,7 @@ class MessageCoordinator {
     }
 
     /**
-     * Check if parsed chat data represents our own bot message
+     * ENHANCED: Check if parsed chat data represents our own bot message
      * @param {object} chatData - Parsed chat data
      * @param {object} guildConfig - Guild configuration
      * @returns {boolean} Whether this is our own bot message
@@ -91,7 +106,72 @@ class MessageCoordinator {
             return false;
         }
         
-        return chatData.username.toLowerCase() === guildConfig.account.username.toLowerCase();
+        const botUsername = guildConfig.account.username.toLowerCase();
+        const messageUsername = chatData.username.toLowerCase();
+        
+        const isOwnBot = messageUsername === botUsername;
+        
+        if (isOwnBot) {
+            logger.debug(`[${guildConfig.name}] Detected own bot message: ${chatData.username} -> "${chatData.message?.substring(0, 50)}${chatData.message?.length > 50 ? '...' : ''}"`);
+        }
+        
+        return isOwnBot;
+    }
+
+    /**
+     * NEW: Check if message appears to be an inter-guild relay
+     * @param {object} chatData - Parsed chat data
+     * @param {object} guildConfig - Guild configuration
+     * @returns {boolean} Whether this appears to be an inter-guild relay message
+     */
+    isInterGuildRelayMessage(chatData, guildConfig) {
+        if (!chatData.message || !chatData.username) {
+            return false;
+        }
+
+        const message = chatData.message;
+        const username = chatData.username;
+        const botUsername = guildConfig.account.username;
+
+        // Pattern 1: Message from bot that looks like "SomeUser: actual message"
+        const relayPattern1 = /^(\w+):\s*(.+)$/;
+        const relayMatch1 = message.match(relayPattern1);
+        
+        if (relayMatch1 && username.toLowerCase() === botUsername.toLowerCase()) {
+            const relayedUsername = relayMatch1[1];
+            const relayedMessage = relayMatch1[2];
+            
+            logger.debug(`[${guildConfig.name}] Detected relay pattern 1: Bot ${username} relaying message from ${relayedUsername}: "${relayedMessage.substring(0, 30)}..."`);
+            return true;
+        }
+
+        // Pattern 2: Repeated username chains "User1: User2: User3: message"
+        const chainPattern = /^(\w+):\s*\1:\s*(.+)$/;
+        const chainMatch = message.match(chainPattern);
+        
+        if (chainMatch) {
+            logger.debug(`[${guildConfig.name}] Detected username chain pattern: "${message.substring(0, 50)}..."`);
+            return true;
+        }
+
+        // Pattern 3: Multiple colon-separated usernames (sign of relay)
+        const multiUserPattern = /^(\w+):\s*(\w+):\s*(\w+):\s*(.+)$/;
+        const multiUserMatch = message.match(multiUserPattern);
+        
+        if (multiUserMatch) {
+            logger.debug(`[${guildConfig.name}] Detected multi-user relay pattern: "${message.substring(0, 50)}..."`);
+            return true;
+        }
+
+        // Pattern 4: Check if bot is relaying based on message structure and timing
+        // Messages that contain the bot's own username in the content (potential echo)
+        const botEchoPattern = new RegExp(`\\b${botUsername}\\b`, 'i');
+        if (username.toLowerCase() === botUsername.toLowerCase() && botEchoPattern.test(message)) {
+            logger.debug(`[${guildConfig.name}] Detected potential bot echo: Bot ${username} mentioning itself in message`);
+            return true;
+        }
+
+        return false;
     }
 
     /**
@@ -125,6 +205,12 @@ class MessageCoordinator {
         const chatData = this.chatParser.parseMessage(rawMessage, guildConfig);
         
         if (chatData.type === 'guild_chat') {
+            // Apply the same filtering as in processMessage
+            if (this.isOwnBotMessage(chatData, guildConfig) || this.isInterGuildRelayMessage(chatData, guildConfig)) {
+                logger.debug(`[GUILD] [${guildConfig.name}] Filtered guild chat message from ${chatData.username}`);
+                return null;
+            }
+            
             logger.bridge(`[GUILD] [${guildConfig.name}] Successfully parsed guild chat - ${chatData.chatType}: ${chatData.username}: "${chatData.message}"`);
             return chatData;
         }
@@ -161,7 +247,13 @@ class MessageCoordinator {
             version: '2.0.0',
             chatParser: this.chatParser?.constructor?.name || 'ChatParser',
             eventParser: this.eventParser?.constructor?.name || 'EventParser',
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
+            improvements: [
+                'Enhanced bot message detection',
+                'Inter-guild relay pattern detection',
+                'Multiple filtering layers',
+                'Improved logging and debugging'
+            ]
         };
     }
 
@@ -176,11 +268,23 @@ class MessageCoordinator {
         
         logger.bridge(`[GUILD] [${guildConfig.name}] TESTING message processing for: "${messageText}"`);
         
+        // Parse the message
+        const chatData = this.chatParser.parseMessage(rawMessage, guildConfig);
+        
         const testResults = {
             input: {
                 raw: rawMessage,
                 text: messageText,
                 length: messageText.length
+            },
+            parsing: {
+                chatData: chatData,
+                eventData: this.eventParser.parseEvent(rawMessage, guildConfig)
+            },
+            filtering: {
+                isOwnBot: chatData.username ? this.isOwnBotMessage(chatData, guildConfig) : false,
+                isInterGuildRelay: chatData.message ? this.isInterGuildRelayMessage(chatData, guildConfig) : false,
+                shouldFilter: false
             },
             processing: {
                 coordinator: this.processMessage(rawMessage, guildConfig),
@@ -193,10 +297,14 @@ class MessageCoordinator {
             metadata: {
                 guildName: guildConfig.name,
                 guildId: guildConfig.id,
+                botUsername: guildConfig.account.username,
                 timestamp: Date.now(),
                 processingTime: Date.now() // This would be calculated properly in real implementation
             }
         };
+        
+        // Determine if message should be filtered
+        testResults.filtering.shouldFilter = testResults.filtering.isOwnBot || testResults.filtering.isInterGuildRelay;
         
         logger.bridge(`[GUILD] [${guildConfig.name}] TEST RESULTS:`, JSON.stringify(testResults, null, 2));
         

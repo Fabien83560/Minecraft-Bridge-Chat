@@ -101,9 +101,14 @@ class EventParser {
                 return {
                     ...baseResult,
                     username: eventMatch.username,
-                    rank: eventMatch.rank || null,
-                    welcomeMessage: this.generateWelcomeMessage(eventMatch.username, guildConfig)
+                    rank: eventMatch.rank || null
                 };
+            
+            case 'disconnect':
+                return {
+                    ...baseResult,
+                    username: eventMatch.username,
+                }
 
             case 'leave':
                 return {
@@ -112,12 +117,17 @@ class EventParser {
                     reason: eventMatch.reason || null,
                     wasKicked: false
                 };
+            
+            case 'welcome':
+                return {
+                    ...baseResult,
+                    username: eventMatch.username,
+                }
 
             case 'kick':
                 return {
                     ...baseResult,
                     username: eventMatch.username,
-                    kickedBy: eventMatch.kickedBy || 'Unknown',
                     reason: eventMatch.reason || null,
                     wasKicked: true
                 };
@@ -288,24 +298,6 @@ class EventParser {
         }
 
         logger.debug(`Cleaned up old event cooldowns, ${this.eventCooldowns.size} entries remaining`);
-    }
-
-    /**
-     * Generate welcome message for new members
-     * @param {string} username - New member username
-     * @param {object} guildConfig - Guild configuration
-     * @returns {string} Welcome message
-     */
-    generateWelcomeMessage(username, guildConfig) {
-        const welcomeMessages = [
-            `Welcome ${username} to ${guildConfig.name}!`,
-            `${username} joined the guild family!`,
-            `Everyone welcome ${username}!`,
-            `${guildConfig.name} grows stronger with ${username}!`
-        ];
-
-        const randomIndex = Math.floor(Math.random() * welcomeMessages.length);
-        return welcomeMessages[randomIndex];
     }
 
     /**

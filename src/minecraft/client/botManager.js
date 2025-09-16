@@ -296,14 +296,40 @@ class BotManager extends EventEmitter {
             throw new Error(error);
         }
 
-        logger.bridge(`[INTER-GUILD] BotManager sending message to ${guildId}: "${message}"`);
+        logger.bridge(`[INTER-GUILD] BotManager sending guild message to ${guildId}: "${message}"`);
         
         try {
             const result = await connection.sendMessage(message);
-            logger.bridge(`[INTER-GUILD] Message sent successfully to ${connection.getGuildConfig().name}`);
+            logger.bridge(`[INTER-GUILD] Guild message sent successfully to ${connection.getGuildConfig().name}`);
             return result;
         } catch (error) {
-            logger.logError(error, `[INTER-GUILD] Failed to send message to ${connection.getGuildConfig().name}`);
+            logger.logError(error, `[INTER-GUILD] Failed to send guild message to ${connection.getGuildConfig().name}`);
+            throw error;
+        }
+    }
+
+    async sendOfficerMessage(guildId, message) {
+        const connection = this.connections.get(guildId);
+        if (!connection) {
+            const error = `No connection found for guild: ${guildId}`;
+            logger.error(`[INTER-GUILD] ${error}`);
+            throw new Error(error);
+        }
+
+        if (!connection.isconnected()) {
+            const error = `Guild ${guildId} is not connected`;
+            logger.error(`[INTER-GUILD] ${error}`);
+            throw new Error(error);
+        }
+
+        logger.bridge(`[INTER-GUILD] BotManager sending officer message to ${guildId}: "${message}"`);
+        
+        try {
+            const result = await connection.sendOfficerMessage(message);
+            logger.bridge(`[INTER-GUILD] Officer message sent successfully to ${connection.getGuildConfig().name}`);
+            return result;
+        } catch (error) {
+            logger.logError(error, `[INTER-GUILD] Failed to send officer message to ${connection.getGuildConfig().name}`);
             throw error;
         }
     }

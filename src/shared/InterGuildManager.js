@@ -28,6 +28,7 @@ class InterGuildManager {
         // Statistics
         this.stats = {
             messagesProcessed: 0,
+            officerMessagesProcessed: 0,
             eventsProcessed: 0,
             messagesDropped: 0,
             rateLimitHits: 0,
@@ -56,7 +57,7 @@ class InterGuildManager {
             // Start message queue processor
             if (this.interGuildConfig.enabled) {
                 this.startQueueProcessor();
-                logger.info('✅ InterGuildManager initialized and enabled with anti-loop protection');
+                logger.info('✅ InterGuildManager initialized and enabled with officer chat support');
             } else {
                 logger.info('🔒 InterGuildManager initialized but disabled');
             }
@@ -81,16 +82,27 @@ class InterGuildManager {
             return;
         }
 
-        // Skip if it's an officer message and officer-to-guild is disabled
-        if (messageData.chatType === 'officer' && !this.interGuildConfig.officerToGuildChat) {
-            logger.debug(`[${sourceGuildConfig.name}] Officer message skipped (officer-to-guild disabled)`);
-            return;
-        }
-
         try {
             if (this.isMessageLoopOrDuplicate(messageData, sourceGuildConfig)) {
                 this.stats.loopsDetected++;
                 return;
+            }
+
+            // Handle officer messages specifically
+            if (messageData.chatType === 'officer') {
+                // Process officer-to-officer chat if enabled
+                if (this.interGuildConfig.officerToOfficerChat) {
+                    await this.processOfficerMessage(messageData, sourceGuildConfig, minecraftManager);
+                }
+                
+                // Also process officer-to-guild chat if enabled
+                if (this.interGuildConfig.officerToGuildChat) {
+                    // Continue processing as regular guild message below
+                } else {
+                    // Skip regular guild processing if officer-to-guild is disabled
+                    logger.debug(`[${sourceGuildConfig.name}] Officer message processed for officer-to-officer only`);
+                    return;
+                }
             }
 
             // Get all enabled guilds except the source
@@ -109,7 +121,8 @@ class InterGuildManager {
                 return;
             }
 
-            logger.bridge(`[INTER-GUILD] Processing message from ${sourceGuildConfig.name} to ${targetGuilds.length} target guilds`);
+            const messageType = messageData.chatType === 'officer' ? 'guild message (from officer chat)' : 'guild message';
+            logger.bridge(`[INTER-GUILD] Processing ${messageType} from ${sourceGuildConfig.name} to ${targetGuilds.length} target guilds`);
 
             this.trackMessage(messageData, sourceGuildConfig);
 
@@ -134,7 +147,61 @@ class InterGuildManager {
     }
 
     /**
-     * NEW: Check if message is a loop or duplicate
+     * Process officer messages for inter-guild transfer
+     * @param {object} messageData - Parsed officer message data
+     * @param {object} sourceGuildConfig - Source guild configuration
+     * @param {object} minecraftManager - Minecraft manager instance for sending messages
+     */
+    async processOfficerMessage(messageData, sourceGuildConfig, minecraftManager) {
+        // Check if officer-to-officer chat is enabled
+        if (!this.interGuildConfig.officerToOfficerChat) {
+            logger.debug(`[${sourceGuildConfig.name}] Officer-to-officer chat disabled, skipping officer message`);
+            return;
+        }
+
+        try {
+            // Get all enabled guilds except the source
+            const allGuilds = this.config.getEnabledGuilds();
+            const targetGuilds = allGuilds.filter(guild => guild.id !== sourceGuildConfig.id);
+
+            if (targetGuilds.length === 0) {
+                logger.debug('No target guilds found for inter-guild officer message');
+                return;
+            }
+
+            // Check rate limiting
+            if (this.isRateLimited(sourceGuildConfig.id)) {
+                this.stats.rateLimitHits++;
+                logger.debug(`[${sourceGuildConfig.name}] Officer message rate limited`);
+                return;
+            }
+
+            logger.bridge(`[INTER-GUILD] Processing officer message from ${sourceGuildConfig.name} to ${targetGuilds.length} target guilds`);
+
+            this.trackMessage(messageData, sourceGuildConfig);
+
+            // Process each target guild for officer messages
+            for (const targetGuildConfig of targetGuilds) {
+                await this.sendOfficerMessageToGuild(
+                    messageData, 
+                    sourceGuildConfig, 
+                    targetGuildConfig, 
+                    minecraftManager
+                );
+            }
+
+            // Update rate limiting
+            this.updateRateLimit(sourceGuildConfig.id);
+            this.stats.officerMessagesProcessed++;
+
+        } catch (error) {
+            logger.logError(error, `Error processing inter-guild officer message from ${sourceGuildConfig.name}`);
+            this.stats.errors++;
+        }
+    }
+
+    /**
+     * Check if message is a loop or duplicate (with officer chat support)
      * @param {object} messageData - Message data
      * @param {object} sourceGuildConfig - Source guild configuration
      * @returns {boolean} Whether message should be dropped as loop/duplicate
@@ -146,38 +213,59 @@ class InterGuildManager {
 
         const message = messageData.message.trim();
         const username = messageData.username;
+        const chatType = messageData.chatType || 'guild';
+        const botUsername = sourceGuildConfig.account.username;
 
-        // Pattern 1: Check for obvious relay patterns
+        // CRITICAL: Always filter our own bot messages first
+        if (username.toLowerCase() === botUsername.toLowerCase()) {
+            logger.debug(`[${sourceGuildConfig.name}] ✅ FILTERED own bot ${chatType} message: ${username} -> "${message.substring(0, 50)}..."`);
+            return true;
+        }
+
+        // Pattern 1 - Check for obvious relay patterns
         const relayPatterns = [
-            /^(\w+):\s*(.+)$/, // "User: message"
-            /^(\w+):\s*\1:\s*(.+)$/, // "User: User: message"
-            /^(\w+):\s*(\w+):\s*(.+)$/ // "User1: User2: message"
+            /^(\w+):\s*(.+)$/,                    // "User: message"
+            /^(\w+):\s*\1:\s*(.+)$/,             // "User: User: message"
+            /^(\w+):\s*(\w+):\s*(.+)$/,          // "User1: User2: message"
+            /^\[[\w\d]+\]\s+(\w+):\s*(.+)$/,     // "[TAG] User: message"
+            /^\[[\w\d]+\]\s+(\w+)\s+\[.*?\]:\s*(.+)$/,  // "[TAG] User [Rank]: message"
         ];
 
-        for (const pattern of relayPatterns) {
+        // Officer-specific relay patterns
+        if (chatType === 'officer') {
+            relayPatterns.push(
+                /^\[[\w\d]+\]\s+\[OFFICER\]\s+(\w+):\s*(.+)$/,     // "[TAG] [OFFICER] User: message"
+                /^\[.*?\]\s+(\w+)\s+\[(?:Officer|Admin|Owner)\]:\s*(.+)$/i,  // "[TAG] User [Officer]: message"
+            );
+        }
+
+        for (let i = 0; i < relayPatterns.length; i++) {
+            const pattern = relayPatterns[i];
             if (pattern.test(message)) {
-                logger.debug(`[${sourceGuildConfig.name}] Detected relay pattern in message: "${message.substring(0, 50)}..."`);
+                logger.debug(`[${sourceGuildConfig.name}] ✅ FILTERED ${chatType} relay pattern ${i}: "${message.substring(0, 50)}..."`);
                 return true;
             }
         }
 
-        // Pattern 2: Check message history for this guild
-        const guildHistory = this.messageHistory.get(sourceGuildConfig.id) || [];
+        // Pattern 2 - Check message history for this guild
+        const historyKey = `${sourceGuildConfig.id}-${chatType}`;
+        const guildHistory = this.messageHistory.get(historyKey) || [];
         
         // Check if this exact message was sent recently
         const recentDuplicate = guildHistory.find(historyItem => 
             historyItem.message === message && 
             historyItem.username === username &&
+            historyItem.chatType === chatType &&
             (Date.now() - historyItem.timestamp) < this.duplicateDetectionWindow
         );
 
         if (recentDuplicate) {
-            logger.debug(`[${sourceGuildConfig.name}] Detected recent duplicate message from ${username}`);
+            logger.debug(`[${sourceGuildConfig.name}] ✅ FILTERED ${chatType} recent duplicate: ${username} -> "${message.substring(0, 30)}..."`);
             return true;
         }
 
-        // Pattern 3: Check for message hash duplicates across guilds
-        const messageHash = this.generateMessageHash(message, username);
+        // Pattern 3 - Check for message hash duplicates across guilds
+        const messageHash = this.generateMessageHash(message, username, chatType);
         const hashData = this.messageHashes.get(messageHash);
 
         if (hashData) {
@@ -189,7 +277,7 @@ class InterGuildManager {
                 
                 if (hashData.count > this.maxDuplicatesPerWindow) {
                     this.stats.duplicatesDropped++;
-                    logger.debug(`[${sourceGuildConfig.name}] Message hash duplicate detected (count: ${hashData.count})`);
+                    logger.debug(`[${sourceGuildConfig.name}] ✅ FILTERED ${chatType} hash duplicate (count: ${hashData.count}): "${message.substring(0, 30)}..."`);
                     return true;
                 }
             }
@@ -198,7 +286,8 @@ class InterGuildManager {
             this.messageHashes.set(messageHash, {
                 timestamp: Date.now(),
                 count: 1,
-                guilds: new Set([sourceGuildConfig.id])
+                guilds: new Set([sourceGuildConfig.id]),
+                chatType: chatType
             });
         }
 
@@ -206,17 +295,20 @@ class InterGuildManager {
     }
 
     /**
-     * NEW: Track message for loop detection
+     * Track message for loop detection (with chat type support)
      * @param {object} messageData - Message data
      * @param {object} sourceGuildConfig - Source guild configuration
      */
     trackMessage(messageData, sourceGuildConfig) {
-        const guildHistory = this.messageHistory.get(sourceGuildConfig.id) || [];
+        const chatType = messageData.chatType || 'guild';
+        const historyKey = `${sourceGuildConfig.id}-${chatType}`;
+        const guildHistory = this.messageHistory.get(historyKey) || [];
         
         // Add current message to history
         guildHistory.push({
             message: messageData.message.trim(),
             username: messageData.username,
+            chatType: chatType,
             timestamp: Date.now()
         });
 
@@ -225,18 +317,19 @@ class InterGuildManager {
             guildHistory.shift();
         }
 
-        this.messageHistory.set(sourceGuildConfig.id, guildHistory);
+        this.messageHistory.set(historyKey, guildHistory);
     }
 
     /**
-     * NEW: Generate hash for message content
+     * Generate hash for message content (with chat type)
      * @param {string} message - Message content
      * @param {string} username - Username
+     * @param {string} chatType - Chat type (guild/officer)
      * @returns {string} Message hash
      */
-    generateMessageHash(message, username) {
-        // Simple hash combining username and message
-        const combined = `${username}:${message}`.toLowerCase();
+    generateMessageHash(message, username, chatType = 'guild') {
+        // Simple hash combining username, message, and chat type
+        const combined = `${chatType}:${username}:${message}`.toLowerCase();
         let hash = 0;
         
         for (let i = 0; i < combined.length; i++) {
@@ -394,10 +487,60 @@ class InterGuildManager {
                 maxAttempts: 3
             }, minecraftManager);
 
-            logger.bridge(`[INTER-GUILD] Queued message for ${targetGuildConfig.name}: "${formattedMessage}"`);
+            logger.bridge(`[INTER-GUILD] Queued guild message for ${targetGuildConfig.name}: "${formattedMessage}"`);
 
         } catch (error) {
             logger.logError(error, `Error sending message to guild ${targetGuildConfig.name}`);
+        }
+    }
+
+    /**
+     * Send a formatted officer message to a specific guild
+     * @param {object} messageData - Officer message data
+     * @param {object} sourceGuildConfig - Source guild config
+     * @param {object} targetGuildConfig - Target guild config
+     * @param {object} minecraftManager - Minecraft manager instance
+     */
+    async sendOfficerMessageToGuild(messageData, sourceGuildConfig, targetGuildConfig, minecraftManager) {
+        try {
+            // CRITICAL FIX: Additional safety check to prevent sending to same guild
+            if (this.isSameGuild(sourceGuildConfig, targetGuildConfig)) {
+                logger.warn(`[INTER-GUILD] PREVENTED: Attempted to send officer message from ${sourceGuildConfig.name} back to itself!`);
+                this.stats.sameGuildPrevented++;
+                return;
+            }
+
+            // Format officer message for target guild
+            const formattedMessage = this.messageFormatter.formatGuildMessage(
+                messageData,
+                sourceGuildConfig,
+                targetGuildConfig,
+                'messagesToMinecraft'
+            );
+
+            if (!formattedMessage) {
+                logger.warn(`[${targetGuildConfig.name}] No formatted officer message generated`);
+                return;
+            }
+
+            // Queue the officer message for reliable delivery
+            this.queueMessage({
+                type: 'officer_message',
+                guildId: targetGuildConfig.id,
+                message: formattedMessage,
+                sourceGuild: sourceGuildConfig.name,
+                targetGuild: targetGuildConfig.name,
+                sourceGuildId: sourceGuildConfig.id,
+                targetGuildId: targetGuildConfig.id,
+                timestamp: Date.now(),
+                attempts: 0,
+                maxAttempts: 3
+            }, minecraftManager);
+
+            logger.bridge(`[INTER-GUILD] Queued officer message for ${targetGuildConfig.name}: "${formattedMessage}"`);
+
+        } catch (error) {
+            logger.logError(error, `Error sending officer message to guild ${targetGuildConfig.name}`);
         }
     }
 
@@ -529,10 +672,14 @@ class InterGuildManager {
                 }
             }
 
-            // Send the message
-            await messageItem.minecraftManager.sendMessage(messageItem.guildId, messageItem.message);
-            
-            logger.bridge(`[INTER-GUILD] Delivered ${messageItem.type} to ${messageItem.targetGuild}: "${messageItem.message}"`);
+            // Send the message based on type
+            if (messageItem.type === 'officer_message') {
+                await messageItem.minecraftManager.sendOfficerMessage(messageItem.guildId, messageItem.message);
+                logger.bridge(`[INTER-GUILD] Delivered officer message to ${messageItem.targetGuild}: "${messageItem.message}"`);
+            } else {
+                await messageItem.minecraftManager.sendMessage(messageItem.guildId, messageItem.message);
+                logger.bridge(`[INTER-GUILD] Delivered ${messageItem.type} to ${messageItem.targetGuild}: "${messageItem.message}"`);
+            }
 
         } catch (error) {
             if (messageItem.attempts < messageItem.maxAttempts) {
@@ -646,6 +793,7 @@ class InterGuildManager {
             config: {
                 enabled: this.interGuildConfig.enabled,
                 officerToGuildChat: this.interGuildConfig.officerToGuildChat,
+                officerToOfficerChat: this.interGuildConfig.officerToOfficerChat,
                 showTags: this.interGuildConfig.showTags,
                 showSourceTag: this.interGuildConfig.showSourceTag
             }

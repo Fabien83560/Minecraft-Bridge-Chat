@@ -335,10 +335,33 @@ class MinecraftConnection {
             const fullCommand = `/gc ${truncatedMessage}`;
             this._bot.chat(fullCommand);
 
-            logger.debug(`Message sent for ${this._guildConfig.name}: ${truncatedMessage}`);
+            logger.debug(`Guild message sent for ${this._guildConfig.name}: ${truncatedMessage}`);
         
         } catch (error) {
-            logger.logError(error, `Failed to send message for ${this._guildConfig.name}`);
+            logger.logError(error, `Failed to send guild message for ${this._guildConfig.name}`);
+            throw error;
+        }
+    }
+
+    async sendOfficerMessage(message) {
+        if (!this._isConnected || !this._bot) {
+            throw new Error(`Cannot send officer message: ${this._guildConfig.name} is not connected`);
+        }
+
+        try {
+            // Respect chat length limit
+            const maxLength = this._guildConfig.account.chatLengthLimit || 256;
+            const truncatedMessage = message.length > maxLength 
+                ? message.substring(0, maxLength - 3) + '...'
+                : message;
+
+            const fullCommand = `/oc ${truncatedMessage}`;
+            this._bot.chat(fullCommand);
+
+            logger.debug(`Officer message sent for ${this._guildConfig.name}: ${truncatedMessage}`);
+        
+        } catch (error) {
+            logger.logError(error, `Failed to send officer message for ${this._guildConfig.name}`);
             throw error;
         }
     }

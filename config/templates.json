@@ -9,10 +9,10 @@
           "withBothTags": "[{sourceGuildTag}] {username} {tag}: {message}"
         },
         "officer": {
-          "basic": "[OFFICER] {username}: {message}",
-          "withTag": "[OFFICER] {username} {tag}: {message}",
-          "withSourceTag": "[{sourceGuildTag}] [OFFICER] {username}: {message}",
-          "withBothTags": "[{sourceGuildTag}] [OFFICER] {username} {tag}: {message}"
+          "basic": "{username}: {message}",
+          "withTag": "{username} {tag}: {message}",
+          "withSourceTag": "[{sourceGuildTag}] {username}: {message}",
+          "withBothTags": "[{sourceGuildTag}] {username} {tag}: {message}"
         },
         "events": {
           "join": {
@@ -92,10 +92,10 @@
           }
         },
         "officer": {
-          "basic": "🛡️ **[OFFICER]** **{username}**: {message}",
-          "withTag": "🛡️ **[OFFICER]** **{username}** `{tag}`: {message}",
-          "withSourceTag": "🛡️ **[{sourceGuildTag}]** **[OFFICER]** **{username}**: {message}",
-          "withBothTags": "🛡️ **[{sourceGuildTag}]** **[OFFICER]** **{username}** `{tag}`: {message}",
+          "basic": "🛡️ **{username}**: {message}",
+          "withTag": "🛡️ **{username}** `{tag}`: {message}",
+          "withSourceTag": "🛡️ **[{sourceGuildTag}]** **{username}**: {message}",
+          "withBothTags": "🛡️ **[{sourceGuildTag}]** **{username}** `{tag}`: {message}",
           "embed": {
             "title": "🛡️ Officer Chat - {guildName}",
             "description": "**{username}**: {message}",

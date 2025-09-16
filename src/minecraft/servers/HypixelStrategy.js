@@ -146,8 +146,9 @@ class HypixelStrategy {
                 return null;
             }
 
-            // Log all guild messages with [GUILD] prefix
-            logger.bridge(`[GUILD] [${guildConfig.name}] ${guildMessageResult.type}: ${messageText}`);
+            // Log all guild messages with [GUILD] prefix and chat type
+            const chatTypeLabel = guildMessageResult.subtype === 'officer' ? '[OFFICER]' : '[GUILD]';
+            logger.bridge(`${chatTypeLabel} [${guildConfig.name}] ${guildMessageResult.type}: ${messageText}`);
             
             // For inter-guild processing, we need to set additional metadata
             guildMessageResult.sourceGuildConfig = guildConfig;
@@ -203,7 +204,8 @@ class HypixelStrategy {
                 
                 // Case-insensitive comparison
                 if (extractedUsername.toLowerCase() === botUsername.toLowerCase()) {
-                    logger.debug(`[${guildConfig.name}] Detected own bot message from ${extractedUsername}: "${extractedMessage.substring(0, 50)}${extractedMessage.length > 50 ? '...' : ''}"`);
+                    const chatType = messageText.toLowerCase().includes('officer') ? 'officer' : 'guild';
+                    logger.debug(`[${guildConfig.name}] Detected own bot ${chatType} message from ${extractedUsername}: "${extractedMessage.substring(0, 50)}${extractedMessage.length > 50 ? '...' : ''}"`);
                     return true;
                 }
             }
@@ -309,6 +311,11 @@ class HypixelStrategy {
      * @returns {boolean} Whether message is guild chat
      */
     isGuildChatMessage(message) {
+        // Exclude join/leave messages that appear in guild chat
+        if (this.isJoinLeaveMessage(message)) {
+            return false;
+        }
+        
         return this.testDetectionPatterns(message, 'guildChat');
     }
 
@@ -318,7 +325,28 @@ class HypixelStrategy {
      * @returns {boolean} Whether message is officer chat
      */
     isOfficerChatMessage(message) {
+        // Exclude join/leave messages that might appear with officer prefixes
+        if (this.isJoinLeaveMessage(message)) {
+            return false;
+        }
+        
         return this.testDetectionPatterns(message, 'officerChat');
+    }
+
+    /**
+     * Check if message is a join/leave message that should be treated as event
+     * @param {string} message - Message text
+     * @returns {boolean} Whether message is join/leave
+     */
+    isJoinLeaveMessage(message) {
+        const joinLeavePatterns = [
+            /joined\.?$/,
+            /left\.?$/,
+            /joined the guild/,
+            /left the guild/
+        ];
+        
+        return joinLeavePatterns.some(pattern => pattern.test(message));
     }
 
     /**

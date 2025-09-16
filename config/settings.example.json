@@ -98,6 +98,7 @@
         "interGuild": {
             "enabled": true,
             "officerToGuildChat": false,
+            "officerToOfficerChat": true,
             "showTags": true,
             "showSourceTag": true,
             "shareableEvents": [

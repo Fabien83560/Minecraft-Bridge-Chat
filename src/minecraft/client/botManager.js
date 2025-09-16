@@ -300,7 +300,7 @@ class BotManager extends EventEmitter {
         
         try {
             const result = await connection.sendMessage(message);
-            logger.bridge(`[INTER-GUILD] ✅ Message sent successfully to ${connection.getGuildConfig().name}`);
+            logger.bridge(`[INTER-GUILD] Message sent successfully to ${connection.getGuildConfig().name}`);
             return result;
         } catch (error) {
             logger.logError(error, `[INTER-GUILD] Failed to send message to ${connection.getGuildConfig().name}`);

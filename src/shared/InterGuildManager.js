@@ -33,7 +33,8 @@ class InterGuildManager {
             rateLimitHits: 0,
             duplicatesDropped: 0,
             loopsDetected: 0,
-            errors: 0
+            errors: 0,
+            sameGuildPrevented: 0
         };
 
         this.initialize();
@@ -312,8 +313,15 @@ class InterGuildManager {
 
             logger.bridge(`[INTER-GUILD] Processing event ${eventData.type} from ${sourceGuildConfig.name} to ${targetGuilds.length} target guilds`);
 
-            // Process each target guild
+            // Process each target guild with additional verification
             for (const targetGuildConfig of targetGuilds) {
+                // CRITICAL FIX: Double-check that we're not sending to the same guild
+                if (this.isSameGuild(sourceGuildConfig, targetGuildConfig)) {
+                    logger.warn(`[INTER-GUILD] PREVENTED: Attempted to send event ${eventData.type} from ${sourceGuildConfig.name} back to itself!`);
+                    this.stats.sameGuildPrevented++;
+                    continue;
+                }
+
                 await this.sendEventToGuild(
                     eventData, 
                     sourceGuildConfig, 
@@ -331,6 +339,19 @@ class InterGuildManager {
     }
 
     /**
+     * CRITICAL: Check if source and target guilds are the same
+     * @param {object} sourceGuildConfig - Source guild configuration
+     * @param {object} targetGuildConfig - Target guild configuration
+     * @returns {boolean} Whether guilds are the same
+     */
+    isSameGuild(sourceGuildConfig, targetGuildConfig) {
+        // Check multiple identifiers to be absolutely sure
+        return sourceGuildConfig.id === targetGuildConfig.id ||
+               sourceGuildConfig.name === targetGuildConfig.name ||
+               (sourceGuildConfig.tag && targetGuildConfig.tag && sourceGuildConfig.tag === targetGuildConfig.tag);
+    }
+
+    /**
      * Send a formatted message to a specific guild
      * @param {object} messageData - Message data
      * @param {object} sourceGuildConfig - Source guild config
@@ -339,6 +360,13 @@ class InterGuildManager {
      */
     async sendMessageToGuild(messageData, sourceGuildConfig, targetGuildConfig, minecraftManager) {
         try {
+            // CRITICAL FIX: Additional safety check to prevent sending to same guild
+            if (this.isSameGuild(sourceGuildConfig, targetGuildConfig)) {
+                logger.warn(`[INTER-GUILD] PREVENTED: Attempted to send message from ${sourceGuildConfig.name} back to itself!`);
+                this.stats.sameGuildPrevented++;
+                return;
+            }
+
             // Format message for target guild
             const formattedMessage = this.messageFormatter.formatGuildMessage(
                 messageData,
@@ -359,6 +387,8 @@ class InterGuildManager {
                 message: formattedMessage,
                 sourceGuild: sourceGuildConfig.name,
                 targetGuild: targetGuildConfig.name,
+                sourceGuildId: sourceGuildConfig.id,
+                targetGuildId: targetGuildConfig.id,
                 timestamp: Date.now(),
                 attempts: 0,
                 maxAttempts: 3
@@ -380,6 +410,13 @@ class InterGuildManager {
      */
     async sendEventToGuild(eventData, sourceGuildConfig, targetGuildConfig, minecraftManager) {
         try {
+            // CRITICAL FIX: Additional safety check to prevent sending to same guild
+            if (this.isSameGuild(sourceGuildConfig, targetGuildConfig)) {
+                logger.warn(`[INTER-GUILD] PREVENTED: Attempted to send event ${eventData.type} from ${sourceGuildConfig.name} back to itself!`);
+                this.stats.sameGuildPrevented++;
+                return;
+            }
+
             // Format event for target guild
             const formattedMessage = this.messageFormatter.formatGuildEvent(
                 eventData,
@@ -400,6 +437,8 @@ class InterGuildManager {
                 message: formattedMessage,
                 sourceGuild: sourceGuildConfig.name,
                 targetGuild: targetGuildConfig.name,
+                sourceGuildId: sourceGuildConfig.id,
+                targetGuildId: targetGuildConfig.id,
                 eventType: eventData.type,
                 timestamp: Date.now(),
                 attempts: 0,
@@ -465,6 +504,14 @@ class InterGuildManager {
     async deliverQueuedMessage(messageItem) {
         try {
             messageItem.attempts++;
+
+            // FINAL SAFETY CHECK: Ensure we're not about to send to the same guild
+            if (messageItem.sourceGuildId && messageItem.targetGuildId && 
+                messageItem.sourceGuildId === messageItem.targetGuildId) {
+                logger.error(`[INTER-GUILD] FINAL BLOCK: Prevented sending ${messageItem.type} from ${messageItem.sourceGuild} to itself at delivery time!`);
+                this.stats.sameGuildPrevented++;
+                return;
+            }
 
             // Check if guild is connected
             if (!messageItem.minecraftManager.isGuildConnected(messageItem.guildId)) {
@@ -593,7 +640,8 @@ class InterGuildManager {
                 messageHashes: this.messageHashes.size,
                 guildHistories: this.messageHistory.size,
                 duplicatesDropped: this.stats.duplicatesDropped,
-                loopsDetected: this.stats.loopsDetected
+                loopsDetected: this.stats.loopsDetected,
+                sameGuildPrevented: this.stats.sameGuildPrevented
             },
             config: {
                 enabled: this.interGuildConfig.enabled,

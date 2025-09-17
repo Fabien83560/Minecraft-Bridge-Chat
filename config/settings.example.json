@@ -84,11 +84,13 @@
         "channels": {
             "chat": {
                 "id": "CHAT_CHANNEL_ID",
-                "webhookUrl": "OPTIONAL_WEBHOOK_URL"
+                "webhookUrl": "OPTIONAL_WEBHOOK_URL",
+                "_comment": "WARNING : You need an https://discord.com/ url to work"
             },
             "staff": {
                 "id": "STAFF_CHANNEL_ID",
-                "webhookUrl": "OPTIONAL_WEBHOOK_URL"
+                "webhookUrl": "OPTIONAL_WEBHOOK_URL",
+                "_comment": "WARNING : You need an https://discord.com/ url to work"
             }
         },
         "webhook": {

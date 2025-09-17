@@ -6,7 +6,6 @@ const path = require('path');
 const logger = require('./shared/logger');
 const Config = require("./config/ConfigLoader.js");
 const MinecraftManager = require('./minecraft/MinecraftManager.js');
-const DiscordManager = require('./discord/DiscordManager.js');
 const SystemMonitor = require('./shared/SystemMonitor.js');
 const AdminCommands = require('./shared/AdminCommands.js');
 const BridgeLocator = require("./bridgeLocator.js");
@@ -18,7 +17,6 @@ class MainBridge {
 
         this.config = new Config();
         this._minecraftManager = null;
-        this._discordManager = null;
         this._systemMonitor = null;
         this._adminCommands = null;
 
@@ -49,10 +47,7 @@ class MainBridge {
             // Step 3: Initialize Minecraft Module
             await this.initializeMinecraftModule();
 
-            // Step 4: Initialize Discord Module
-            await this.initializeDiscordModule();
-
-            // Step 5: Finalize startup
+            // Step 4: Finalize startup
             await this.finalizeStartup();
 
             this._isRunning = true;
@@ -86,12 +81,6 @@ class MainBridge {
             if (this._systemMonitor) {
                 this._systemMonitor.stopMonitoring();
                 logger.info('✅ System monitoring stopped');
-            }
-
-            // Stop Discord connections
-            if (this._discordManager) {
-                await this._discordManager.stop();
-                logger.info('✅ Discord connections stopped');
             }
 
             // Stop Minecraft connections
@@ -219,28 +208,6 @@ class MainBridge {
         }
     }
 
-    async initializeDiscordModule() {
-        logger.info("===========================================");
-        logger.info("==== 💬 Initializing Discord Module ====");
-        logger.info("===========================================");
-
-        const stepStartTime = Date.now();
-        try {
-            this._discordManager = new DiscordManager();
-            await this._discordManager.initialize();
-            await this._discordManager.start();
-            
-            logger.logPerformance('Discord module initialization', stepStartTime);
-            logger.discord('✅ Discord module initialized');
-        } catch (error) {
-            logger.logError(error, 'Discord module initialization failed');
-            
-            // Discord is not critical - log error but continue
-            logger.warn('⚠️ Application will continue without Discord functionality');
-            this._discordManager = null;
-        }
-    }
-
     async finalizeStartup() {
         logger.info("===========================================");
         logger.info("======= 🎯 Finalizing Startup =======");
@@ -317,20 +284,6 @@ class MainBridge {
             logger.info(`   • Show user tags: ${showTags ? '✅' : '❌'}`);
             logger.info(`   • Show source tags: ${showSourceTag ? '✅' : '❌'}`);
         }
-
-        // Discord status
-        if (this._discordManager && this._discordManager.isDiscordReady()) {
-            const discordStatus = this._discordManager.getStatus();
-            logger.info(`   • Discord bot: ✅ ${discordStatus.user?.tag || 'Connected'}`);
-            
-            const webhookManager = this._discordManager.getWebhookManager();
-            if (webhookManager) {
-                const webhookStats = webhookManager.getStatistics();
-                logger.info(`   • Discord webhooks: ${webhookStats.activeWebhooks} configured`);
-            }
-        } else {
-            logger.info(`   • Discord bot: ❌ Not available`);
-        }
         
         logger.info(`   • Monitoring enabled: ${this.config.get('advanced.performance.enablePerformanceMonitoring') ? '✅' : '❌'}`);
         logger.info(`   • Log level: ${logger.getLevel()}`);
@@ -357,21 +310,6 @@ class MainBridge {
             }
 
             const health = await this._adminCommands.getHealthStatus();
-            
-            // Also check Discord health if available
-            if (this._discordManager) {
-                try {
-                    const discordHealth = await this._discordManager.healthCheck();
-                    if (!discordHealth.healthy) {
-                        health.issues.push(...discordHealth.issues.map(issue => `Discord: ${issue}`));
-                        if (health.overall === 'healthy') {
-                            health.overall = 'warning';
-                        }
-                    }
-                } catch (error) {
-                    logger.debug('Discord health check failed:', error.message);
-                }
-            }
             
             if (health.overall === 'critical') {
                 logger.error(`🚨 CRITICAL system health issues detected: ${health.issues.join(', ')}`);
@@ -472,13 +410,6 @@ class MainBridge {
             };
         }
 
-        if (this._discordManager) {
-            baseStats.discord = {
-                status: this._discordManager.getStatus(),
-                statistics: this._discordManager.getStatistics()
-            };
-        }
-
         if (this._systemMonitor) {
             baseStats.monitoring = this._systemMonitor.getStatistics();
         }
@@ -538,10 +469,6 @@ class MainBridge {
     // Convenience methods for external access
     getMinecraftManager() {
         return this._minecraftManager;
-    }
-
-    getDiscordManager() {
-        return this._discordManager;
     }
 
     getSystemMonitor() {

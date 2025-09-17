@@ -1,4 +1,5 @@
 // Specific Imports
+const BridgeCoordinator = require('../discord/bridge/BridgeCoordinator.js');
 const BotManager = require("./client/botManager.js")
 const BridgeLocator = require("../bridgeLocator.js");
 const logger = require('../shared/logger/index.js');
@@ -11,6 +12,10 @@ class MinecraftManager {
         this._isInitialized = false;
         this._isStarted = false;
         this._botManager = null;
+        
+        // Discord integration
+        this._discordManager = null;
+        this._bridgeCoordinator = null;
 
         // Event handlers
         this.messageHandlers = [];
@@ -55,6 +60,9 @@ class MinecraftManager {
             
             // Start all bot connections
             await this._botManager.startAll();
+            
+            // Setup Discord integration after successful start
+            this.setupDiscordIntegration();
             
             this._isStarted = true;
             logger.minecraft('✅ All Minecraft connections started successfully');
@@ -130,6 +138,40 @@ class MinecraftManager {
         });
     }
 
+    /**
+     * Setup Discord integration
+     */
+    setupDiscordIntegration() {
+        try {
+            const mainBridge = BridgeLocator.getInstance();
+            this._discordManager = mainBridge.getDiscordManager?.();
+
+            if (this._discordManager) {
+                this._bridgeCoordinator = new BridgeCoordinator();
+                this._bridgeCoordinator.initialize(this._discordManager, this);
+                
+                logger.bridge('✅ Discord integration setup completed for MinecraftManager');
+            } else {
+                logger.warn('Discord manager not available for integration');
+            }
+            
+        } catch (error) {
+            logger.logError(error, 'Failed to setup Discord integration for MinecraftManager');
+        }
+    }
+
+    /**
+     * Set Discord manager reference (called from main bridge)
+     * @param {object} discordManager - Discord manager instance
+     */
+    setDiscordManager(discordManager) {
+        this._discordManager = discordManager;
+        
+        if (this._isStarted && !this._bridgeCoordinator) {
+            this.setupDiscordIntegration();
+        }
+    }
+
     // Public event registration methods
     onMessage(callback) {
         this.messageHandlers.push(callback);
@@ -187,6 +229,45 @@ class MinecraftManager {
         }
 
         return this._botManager.getConnectedGuilds();
+    }
+
+    // Discord integration methods
+    getDiscordManager() {
+        return this._discordManager;
+    }
+
+    getBridgeCoordinator() {
+        return this._bridgeCoordinator;
+    }
+
+    getInterGuildStats() {
+        if (!this._botManager) {
+            return null;
+        }
+
+        return this._botManager.getInterGuildStats();
+    }
+
+    updateInterGuildConfig(newConfig) {
+        if (this._botManager) {
+            this._botManager.updateInterGuildConfig(newConfig);
+            logger.info('Inter-guild configuration updated via MinecraftManager');
+        }
+    }
+
+    testMessageFormatting(testData) {
+        if (!this._botManager) {
+            return { error: 'BotManager not available' };
+        }
+
+        return this._botManager.testInterGuildFormatting(testData);
+    }
+
+    clearInterGuildCache() {
+        if (this._botManager) {
+            this._botManager.clearInterGuildCache();
+            logger.info('Inter-guild cache cleared via MinecraftManager');
+        }
     }
 }
 

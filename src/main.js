@@ -6,6 +6,7 @@ const path = require('path');
 const logger = require('./shared/logger');
 const Config = require("./config/ConfigLoader.js");
 const MinecraftManager = require('./minecraft/MinecraftManager.js');
+const DiscordManager = require('./discord/DiscordManager.js');
 const SystemMonitor = require('./shared/SystemMonitor.js');
 const AdminCommands = require('./shared/AdminCommands.js');
 const BridgeLocator = require("./bridgeLocator.js");
@@ -17,6 +18,7 @@ class MainBridge {
 
         this.config = new Config();
         this._minecraftManager = null;
+        this._discordManager = null;
         this._systemMonitor = null;
         this._adminCommands = null;
 
@@ -47,7 +49,13 @@ class MainBridge {
             // Step 3: Initialize Minecraft Module
             await this.initializeMinecraftModule();
 
-            // Step 4: Finalize startup
+            // Step 4: Initialize Discord Module
+            await this.initializeDiscordModule();
+
+            // Step 5: Setup Cross-Manager Integration
+            this.setupCrossManagerIntegration();
+
+            // Step 6: Finalize startup
             await this.finalizeStartup();
 
             this._isRunning = true;
@@ -87,6 +95,12 @@ class MainBridge {
             if (this._minecraftManager) {
                 await this._minecraftManager.stop();
                 logger.info('✅ Minecraft connections stopped');
+            }
+
+            // Stop Discord connections
+            if (this._discordManager) {
+                await this._discordManager.stop();
+                logger.info('✅ Discord connections stopped');
             }
 
             this._isRunning = false;
@@ -208,26 +222,46 @@ class MainBridge {
         }
     }
 
-    async finalizeStartup() {
+    async initializeDiscordModule() {
         logger.info("===========================================");
-        logger.info("======= 🎯 Finalizing Startup =======");
+        logger.info("==== 💬  Initializing Discord Module  ====");
         logger.info("===========================================");
 
         const stepStartTime = Date.now();
+        try {
+            this._discordManager = new DiscordManager();
+            await this._discordManager.start();
+            
+            // Set up event handlers for statistics and monitoring
+            this.setupDiscordEventHandlers();
+            
+            logger.logPerformance('Discord module initialization', stepStartTime);
+            logger.discord('✅ Discord module initialized');
+        } catch (error) {
+            logger.logError(error, 'Discord module initialization failed');
+            throw new Error(`Discord module initialization failed: ${error.message}`);
+        }
+    }
+
+    /**
+     * Setup cross-manager integration
+     */
+    setupCrossManagerIntegration() {
+        logger.info("===========================================");
+        logger.info("=== 🔗 Setting up Cross-Integration ===");
+        logger.info("===========================================");
 
         try {
-            // Log startup summary
-            this.logStartupSummary();
+            // Set Discord manager reference in Minecraft manager
+            if (this._minecraftManager && this._discordManager) {
+                this._minecraftManager.setDiscordManager(this._discordManager);
+                logger.bridge('✅ Discord manager linked to Minecraft manager');
+            }
 
-            // Start periodic health checks
-            this.startHealthChecks();
-
-            logger.logPerformance('Startup finalization', stepStartTime);
-            logger.info('✅ Startup finalized');
-
+            logger.info('✅ Cross-manager integration completed');
         } catch (error) {
-            logger.logError(error, 'Startup finalization failed');
-            throw new Error(`Startup finalization failed: ${error.message}`);
+            logger.logError(error, 'Cross-manager integration failed');
+            // Don't throw here - the system can still work with limited integration
         }
     }
 
@@ -270,6 +304,53 @@ class MainBridge {
         });
     }
 
+    setupDiscordEventHandlers() {
+        if (!this._discordManager) {
+            return;
+        }
+
+        this._discordManager.onConnection((connectionData) => {
+            if (connectionData.type === 'connected') {
+                logger.discord(`Discord bot connected: ${connectionData.bot.tag}`);
+            } else if (connectionData.type === 'disconnected') {
+                logger.discord('Discord bot disconnected');
+            }
+        });
+        
+        this._discordManager.onError((error) => {
+            this.stats.errors++;
+            logger.logError(error, 'Discord connection error');
+        });
+
+        this._discordManager.onMessage((messageData) => {
+            // Discord message handling (for future Discord to Minecraft bridging)
+            logger.debug(`Discord message received: ${messageData.type}`);
+        });
+    }
+
+    async finalizeStartup() {
+        logger.info("===========================================");
+        logger.info("======= 🎯 Finalizing Startup =======");
+        logger.info("===========================================");
+
+        const stepStartTime = Date.now();
+
+        try {
+            // Log startup summary
+            this.logStartupSummary();
+
+            // Start periodic health checks
+            this.startHealthChecks();
+
+            logger.logPerformance('Startup finalization', stepStartTime);
+            logger.info('✅ Startup finalized');
+
+        } catch (error) {
+            logger.logError(error, 'Startup finalization failed');
+            throw new Error(`Startup finalization failed: ${error.message}`);
+        }
+    }
+
     logStartupSummary() {
         const enabledGuilds = this.config.getEnabledGuilds();
         const interGuildEnabled = this.config.get('bridge.interGuild.enabled');
@@ -285,6 +366,7 @@ class MainBridge {
             logger.info(`   • Show source tags: ${showSourceTag ? '✅' : '❌'}`);
         }
         
+        logger.info(`   • Discord integration: ${this._discordManager ? '✅' : '❌'}`);
         logger.info(`   • Monitoring enabled: ${this.config.get('advanced.performance.enablePerformanceMonitoring') ? '✅' : '❌'}`);
         logger.info(`   • Log level: ${logger.getLevel()}`);
 
@@ -410,6 +492,10 @@ class MainBridge {
             };
         }
 
+        if (this._discordManager) {
+            baseStats.discord = this._discordManager.getStatistics();
+        }
+
         if (this._systemMonitor) {
             baseStats.monitoring = this._systemMonitor.getStatistics();
         }
@@ -469,6 +555,10 @@ class MainBridge {
     // Convenience methods for external access
     getMinecraftManager() {
         return this._minecraftManager;
+    }
+
+    getDiscordManager() {
+        return this._discordManager;
     }
 
     getSystemMonitor() {

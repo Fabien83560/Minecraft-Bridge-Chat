@@ -10,6 +10,10 @@ class InterGuildManager {
 
         this.interGuildConfig = this.config.get('bridge.interGuild');
         this.messageFormatter = null;
+        
+        // Discord integration
+        this._discordManager = null;
+        this._bridgeCoordinator = null;
 
         // Rate limiting
         this.rateLimiter = new Map(); // guildId -> last message times
@@ -65,10 +69,41 @@ class InterGuildManager {
             // Start cleanup interval for anti-loop protection
             this.startCleanupInterval();
 
+            // Setup Discord integration
+            this.setupDiscordIntegration();
+
         } catch (error) {
             logger.logError(error, 'Failed to initialize InterGuildManager');
             throw error;
         }
+    }
+
+    /**
+     * Setup Discord integration
+     */
+    setupDiscordIntegration() {
+        try {
+            const mainBridge = BridgeLocator.getInstance();
+            this._discordManager = mainBridge.getDiscordManager?.();
+
+            if (this._discordManager) {
+                logger.bridge('✅ Discord integration setup completed for InterGuildManager');
+            } else {
+                logger.debug('Discord manager not available for InterGuildManager integration');
+            }
+            
+        } catch (error) {
+            logger.logError(error, 'Failed to setup Discord integration for InterGuildManager');
+        }
+    }
+
+    /**
+     * Set Discord manager reference (called from main bridge)
+     * @param {object} discordManager - Discord manager instance
+     */
+    setDiscordManager(discordManager) {
+        this._discordManager = discordManager;
+        logger.bridge('Discord manager reference set in InterGuildManager');
     }
 
     /**
@@ -136,6 +171,16 @@ class InterGuildManager {
                 );
             }
 
+            // Also send to Discord if available (Minecraft -> Discord bridging)
+            if (this._discordManager) {
+                try {
+                    await this._discordManager.sendGuildMessage(messageData, sourceGuildConfig);
+                    logger.bridge(`[MC→DC] Sent ${messageData.chatType || 'guild'} message to Discord from ${sourceGuildConfig.name}`);
+                } catch (error) {
+                    logger.logError(error, `Failed to send message to Discord from ${sourceGuildConfig.name}`);
+                }
+            }
+
             // Update rate limiting
             this.updateRateLimit(sourceGuildConfig.id);
             this.stats.messagesProcessed++;
@@ -188,6 +233,16 @@ class InterGuildManager {
                     targetGuildConfig, 
                     minecraftManager
                 );
+            }
+
+            // Also send to Discord staff channel if available
+            if (this._discordManager) {
+                try {
+                    await this._discordManager.sendGuildMessage(messageData, sourceGuildConfig);
+                    logger.bridge(`[MC→DC] Sent officer message to Discord from ${sourceGuildConfig.name}`);
+                } catch (error) {
+                    logger.logError(error, `Failed to send officer message to Discord from ${sourceGuildConfig.name}`);
+                }
             }
 
             // Update rate limiting
@@ -421,6 +476,16 @@ class InterGuildManager {
                     targetGuildConfig, 
                     minecraftManager
                 );
+            }
+
+            // Also send to Discord if available (Minecraft -> Discord bridging)
+            if (this._discordManager) {
+                try {
+                    await this._discordManager.sendGuildEvent(eventData, sourceGuildConfig);
+                    logger.bridge(`[MC→DC] Sent ${eventData.type} event to Discord from ${sourceGuildConfig.name}`);
+                } catch (error) {
+                    logger.logError(error, `Failed to send event to Discord from ${sourceGuildConfig.name}`);
+                }
             }
 
             this.stats.eventsProcessed++;
@@ -796,6 +861,10 @@ class InterGuildManager {
                 officerToOfficerChat: this.interGuildConfig.officerToOfficerChat,
                 showTags: this.interGuildConfig.showTags,
                 showSourceTag: this.interGuildConfig.showSourceTag
+            },
+            discordIntegration: {
+                available: !!this._discordManager,
+                connected: this._discordManager ? this._discordManager.isConnected() : false
             }
         };
     }

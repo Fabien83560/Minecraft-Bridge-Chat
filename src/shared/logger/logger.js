@@ -20,7 +20,7 @@ class Logger {
             error: 3,
         };
         
-        this.currentLevel = this.levels[this.config.level] || 1;
+        this.currentLevel = (this.config.level in this.levels) ? this.levels[this.config.level] : 1;
         
         // Colors for console
         this.colors = {

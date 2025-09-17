@@ -36,7 +36,9 @@ class BridgeCoordinator {
                 errors: 0
             },
             totalProcessed: 0,
-            totalErrors: 0
+            totalErrors: 0,
+            lastMessageTime: null,
+            lastEventTime: null
         };
 
         logger.debug('BridgeCoordinator initialized');
@@ -48,8 +50,12 @@ class BridgeCoordinator {
      * @param {object} minecraftManager - Minecraft manager instance
      */
     initialize(discordManager, minecraftManager) {
+        logger.debug('[BRIDGE] BridgeCoordinator.initialize called');
+        
         this.discordManager = discordManager;
         this.minecraftManager = minecraftManager;
+
+        logger.debug(`[BRIDGE] Managers set - Discord: ${!!discordManager}, Minecraft: ${!!minecraftManager}`);
 
         this.setupMinecraftToDiscordBridge();
         // this.setupDiscordToMinecraftBridge(); // Disabled for now
@@ -66,18 +72,28 @@ class BridgeCoordinator {
             return;
         }
 
+        if (!this.discordManager) {
+            logger.warn('Discord manager not available for bridge setup');
+            return;
+        }
+
+        logger.debug('[BRIDGE] Setting up Minecraft to Discord event handlers...');
+
         // Handle Minecraft messages
         this.minecraftManager.onMessage((messageData) => {
+            logger.debug(`[BRIDGE] Received Minecraft message event: ${JSON.stringify(messageData)}`);
             this.handleMinecraftMessage(messageData);
         });
 
         // Handle Minecraft events
         this.minecraftManager.onEvent((eventData) => {
+            logger.debug(`[BRIDGE] Received Minecraft event: ${JSON.stringify(eventData)}`);
             this.handleMinecraftEvent(eventData);
         });
 
         // Handle Minecraft connection events
         this.minecraftManager.onConnection((connectionData) => {
+            logger.debug(`[BRIDGE] Received Minecraft connection event: ${JSON.stringify(connectionData)}`);
             this.handleMinecraftConnection(connectionData);
         });
 
@@ -95,6 +111,7 @@ class BridgeCoordinator {
 
         // Handle Discord messages (for future implementation)
         this.discordManager.onMessage((messageData) => {
+            logger.debug(`[BRIDGE] Received Discord message event: ${JSON.stringify(messageData)}`);
             this.handleDiscordMessage(messageData);
         });
 
@@ -109,11 +126,18 @@ class BridgeCoordinator {
      */
     async handleMinecraftMessage(messageData) {
         try {
+            logger.debug(`[MC→DC] Processing message: ${JSON.stringify(messageData)}`);
+            const guilds = this.config.getEnabledGuilds().filter(guild => guild.account.username === messageData.username);
+            if(guilds.length !== 0)
+                return;
+            
             // Skip if Discord bridging is disabled
             if (!this.routingConfig.guildChatToDiscord && messageData.chatType === 'guild') {
+                logger.debug(`[MC→DC] Guild chat bridging disabled, skipping message`);
                 return;
             }
             if (!this.routingConfig.officerChatToDiscord && messageData.chatType === 'officer') {
+                logger.debug(`[MC→DC] Officer chat bridging disabled, skipping message`);
                 return;
             }
 
@@ -124,10 +148,18 @@ class BridgeCoordinator {
                 return;
             }
 
-            logger.bridge(`[MC→DC] Processing ${messageData.chatType || 'guild'} message from ${guildConfig.name}: ${messageData.username} -> "${messageData.message}"`);
+            logger.discord(`[MC→DC] Processing ${messageData.chatType || 'guild'} message from ${guildConfig.name}: ${messageData.username} -> "${messageData.message}"`);
+
+            // Check if Discord manager is ready
+            if (!this.discordManager.isConnected()) {
+                logger.warn(`[MC→DC] Discord not connected, skipping message`);
+                return;
+            }
 
             // Send to Discord
-            await this.discordManager.sendGuildMessage(messageData, guildConfig);
+            logger.debug(`[MC→DC] Sending message to Discord...`);
+            const result = await this.discordManager.sendGuildMessage(messageData, guildConfig);
+            logger.debug(`[MC→DC] Discord send result: ${JSON.stringify(result)}`);
 
             // Update statistics
             if (messageData.chatType === 'officer') {
@@ -137,6 +169,9 @@ class BridgeCoordinator {
             }
             
             this.stats.totalProcessed++;
+            this.stats.lastMessageTime = Date.now();
+
+            logger.discord(`[MC→DC] ✅ Message successfully bridged to Discord`);
 
         } catch (error) {
             this.stats.minecraftToDiscord.errors++;
@@ -151,8 +186,11 @@ class BridgeCoordinator {
      */
     async handleMinecraftEvent(eventData) {
         try {
+            logger.debug(`[MC→DC] Processing event: ${JSON.stringify(eventData)}`);
+            
             // Skip if event bridging is disabled
             if (!this.routingConfig.eventsToDiscord) {
+                logger.debug(`[MC→DC] Event bridging disabled, skipping event`);
                 return;
             }
 
@@ -163,14 +201,25 @@ class BridgeCoordinator {
                 return;
             }
 
-            logger.bridge(`[MC→DC] Processing ${eventData.type} event from ${guildConfig.name}: ${eventData.username || 'system'}`);
+            logger.discord(`[MC→DC] Processing ${eventData.type} event from ${guildConfig.name}: ${eventData.username || 'system'}`);
+
+            // Check if Discord manager is ready
+            if (!this.discordManager.isConnected()) {
+                logger.warn(`[MC→DC] Discord not connected, skipping event`);
+                return;
+            }
 
             // Send to Discord
-            await this.discordManager.sendGuildEvent(eventData, guildConfig);
+            logger.debug(`[MC→DC] Sending event to Discord...`);
+            const result = await this.discordManager.sendGuildEvent(eventData, guildConfig);
+            logger.debug(`[MC→DC] Discord event send result: ${JSON.stringify(result)}`);
 
             // Update statistics
             this.stats.minecraftToDiscord.events++;
             this.stats.totalProcessed++;
+            this.stats.lastEventTime = Date.now();
+
+            logger.discord(`[MC→DC] ✅ Event successfully bridged to Discord`);
 
         } catch (error) {
             this.stats.minecraftToDiscord.errors++;
@@ -180,71 +229,71 @@ class BridgeCoordinator {
     }
 
     /**
-     * Handle Minecraft connection status
-     * @param {object} connectionData - Connection status data
+     * Handle Minecraft connection events
+     * @param {object} connectionData - Connection event data
      */
     async handleMinecraftConnection(connectionData) {
         try {
-            // Skip if system messages bridging is disabled
+            logger.debug(`[MC→DC] Processing connection event: ${JSON.stringify(connectionData)}`);
+            
+            // Skip if system message bridging is disabled
             if (!this.routingConfig.systemMessagesToDiscord) {
+                logger.debug(`[MC→DC] System message bridging disabled, skipping connection event`);
                 return;
             }
 
-            logger.bridge(`[MC→DC] Processing connection status: ${connectionData.type} for ${connectionData.guildName || connectionData.guildId}`);
+            const guildId = connectionData.guildId || connectionData.guild;
+            if (!guildId) {
+                logger.warn(`No guild ID found in connection data`);
+                return;
+            }
+
+            // Get guild configuration
+            const guildConfig = this.getGuildConfig(guildId);
+            if (!guildConfig) {
+                logger.warn(`Guild configuration not found for connection event: ${guildId}`);
+                return;
+            }
+
+            logger.discord(`[MC→DC] Processing connection ${connectionData.type} for ${guildConfig.name}`);
+
+            // Check if Discord manager is ready
+            if (!this.discordManager.isConnected()) {
+                logger.warn(`[MC→DC] Discord not connected, skipping connection event`);
+                return;
+            }
 
             // Send connection status to Discord
-            await this.discordManager.sendConnectionStatus(
-                connectionData.guildId,
-                connectionData.type,
-                {
-                    reason: connectionData.reason,
-                    username: connectionData.username,
-                    connectionTime: connectionData.connectionTime,
-                    attempt: connectionData.attempt
-                }
+            logger.debug(`[MC→DC] Sending connection status to Discord...`);
+            const result = await this.discordManager.sendConnectionStatus(
+                connectionData.type, 
+                guildConfig, 
+                connectionData
             );
+            logger.debug(`[MC→DC] Discord connection status send result: ${JSON.stringify(result)}`);
 
             // Update statistics
             this.stats.minecraftToDiscord.systemMessages++;
             this.stats.totalProcessed++;
 
+            logger.discord(`[MC→DC] ✅ Connection event successfully bridged to Discord`);
+
         } catch (error) {
             this.stats.minecraftToDiscord.errors++;
             this.stats.totalErrors++;
-            logger.logError(error, `Error bridging Minecraft connection status to Discord for guild ${connectionData.guildId}`);
+            logger.logError(error, `Error bridging Minecraft connection event to Discord`);
         }
     }
 
-    // ==================== DISCORD TO MINECRAFT HANDLERS ====================
+    // ==================== DISCORD TO MINECRAFT HANDLERS (FUTURE) ====================
 
     /**
-     * Handle Discord bridge message (for future implementation)
+     * Handle Discord message (for future implementation)
      * @param {object} messageData - Discord message data
      */
     async handleDiscordMessage(messageData) {
-        try {
-            // This feature is disabled for now
-            if (!this.routingConfig.discordToMinecraft) {
-                return;
-            }
-
-            logger.bridge(`[DC→MC] Processing Discord message from ${messageData.data.author.username} in ${messageData.channel} channel`);
-
-            // TODO: Implement Discord to Minecraft messaging
-            // This would require:
-            // 1. Parsing Discord message
-            // 2. Formatting for Minecraft
-            // 3. Sending to appropriate guild(s)
-            // 4. Handling permissions and validation
-
-            this.stats.discordToMinecraft.messages++;
-            this.stats.totalProcessed++;
-
-        } catch (error) {
-            this.stats.discordToMinecraft.errors++;
-            this.stats.totalErrors++;
-            logger.logError(error, 'Error bridging Discord message to Minecraft');
-        }
+        // Future implementation for Discord to Minecraft bridging
+        logger.debug(`[DC→MC] Discord message received (not implemented): ${JSON.stringify(messageData)}`);
     }
 
     // ==================== UTILITY METHODS ====================
@@ -252,100 +301,28 @@ class BridgeCoordinator {
     /**
      * Get guild configuration by ID
      * @param {string} guildId - Guild ID
-     * @returns {object|null} Guild configuration or null
+     * @returns {object|null} Guild configuration
      */
     getGuildConfig(guildId) {
-        const enabledGuilds = this.config.getEnabledGuilds();
-        return enabledGuilds.find(guild => guild.id === guildId) || null;
+        const guilds = this.config.getEnabledGuilds();
+        return guilds.find(guild => guild.id === guildId) || null;
     }
 
     /**
-     * Send system message to Discord
-     * @param {string} type - System message type
-     * @param {string} message - System message content
-     * @param {object} details - Additional details
-     * @param {string} channelType - Target channel type (chat/staff)
+     * Get coordinator statistics
+     * @returns {object} Statistics object
      */
-    async sendSystemMessage(type, message, details = {}, channelType = 'chat') {
-        try {
-            if (!this.discordManager || !this.routingConfig.systemMessagesToDiscord) {
-                return;
-            }
-
-            // Create system message data
-            const systemData = {
-                message: message,
-                details: details,
-                context: type,
-                timestamp: Date.now()
-            };
-
-            // Use first enabled guild as default for system messages
-            const guildConfig = this.config.getEnabledGuilds()[0];
-            if (!guildConfig) {
-                logger.warn('No guild configuration available for system message');
-                return;
-            }
-
-            logger.bridge(`[SYSTEM→DC] Sending system message to ${channelType} channel: ${message}`);
-
-            await this.discordManager.sendSystemMessage(type, systemData, guildConfig, channelType);
-
-            this.stats.minecraftToDiscord.systemMessages++;
-            this.stats.totalProcessed++;
-
-        } catch (error) {
-            this.stats.minecraftToDiscord.errors++;
-            this.stats.totalErrors++;
-            logger.logError(error, 'Error sending system message to Discord');
-        }
-    }
-
-    /**
-     * Send test message for debugging
-     * @param {string} content - Test message content
-     * @param {string} channelType - Target channel type
-     * @returns {Promise} Test result
-     */
-    async sendTestMessage(content = 'Test message from BridgeCoordinator', channelType = 'chat') {
-        try {
-            const guildConfig = this.config.getEnabledGuilds()[0];
-            if (!guildConfig) {
-                throw new Error('No guild configuration available for test message');
-            }
-
-            // Create test message data
-            const testMessageData = {
-                type: 'guild_chat',
-                chatType: 'guild',
-                username: 'TestUser',
-                message: content,
-                guildId: guildConfig.id,
-                guildName: guildConfig.name,
-                guildTag: guildConfig.tag,
-                timestamp: Date.now(),
-                parsedSuccessfully: true
-            };
-
-            logger.bridge(`[TEST→DC] Sending test message to ${channelType} channel: "${content}"`);
-
-            await this.discordManager.sendGuildMessage(testMessageData, guildConfig);
-
-            return {
-                success: true,
-                message: 'Test message sent successfully',
-                channelType: channelType,
-                content: content
-            };
-
-        } catch (error) {
-            logger.logError(error, 'Error sending test message to Discord');
-            return {
-                success: false,
-                error: error.message,
-                channelType: channelType
-            };
-        }
+    getStatistics() {
+        return {
+            ...this.stats,
+            routing: this.routingConfig,
+            managers: {
+                discord: !!this.discordManager,
+                minecraft: !!this.minecraftManager,
+                discordConnected: this.discordManager ? this.discordManager.isConnected() : false
+            },
+            uptime: process.uptime()
+        };
     }
 
     /**
@@ -354,24 +331,7 @@ class BridgeCoordinator {
      */
     updateRoutingConfig(newConfig) {
         this.routingConfig = { ...this.routingConfig, ...newConfig };
-        logger.bridge('BridgeCoordinator routing configuration updated:', this.routingConfig);
-    }
-
-    /**
-     * Get bridge statistics
-     * @returns {object} Bridge statistics
-     */
-    getStatistics() {
-        return {
-            ...this.stats,
-            routingConfig: this.routingConfig,
-            managersAvailable: {
-                discord: !!this.discordManager,
-                minecraft: !!this.minecraftManager
-            },
-            successRate: this.stats.totalProcessed > 0 ? 
-                ((this.stats.totalProcessed - this.stats.totalErrors) / this.stats.totalProcessed * 100).toFixed(2) + '%' : '0%'
-        };
+        logger.bridge('BridgeCoordinator routing configuration updated');
     }
 
     /**
@@ -391,60 +351,21 @@ class BridgeCoordinator {
                 errors: 0
             },
             totalProcessed: 0,
-            totalErrors: 0
+            totalErrors: 0,
+            lastMessageTime: null,
+            lastEventTime: null
         };
-
-        logger.debug('BridgeCoordinator statistics reset');
-    }
-
-    /**
-     * Check if bridge is operational
-     * @returns {object} Bridge status
-     */
-    getStatus() {
-        const status = {
-            operational: false,
-            discord: {
-                available: !!this.discordManager,
-                connected: this.discordManager ? this.discordManager.isConnected() : false
-            },
-            minecraft: {
-                available: !!this.minecraftManager,
-                connections: this.minecraftManager ? this.minecraftManager.getConnectedGuilds().length : 0
-            },
-            routing: this.routingConfig
-        };
-
-        status.operational = status.discord.connected && status.minecraft.connections > 0;
-
-        return status;
-    }
-
-    /**
-     * Enable/disable specific routing
-     * @param {string} routingType - Routing type to toggle
-     * @param {boolean} enabled - Whether to enable or disable
-     */
-    setRouting(routingType, enabled) {
-        if (this.routingConfig.hasOwnProperty(routingType)) {
-            this.routingConfig[routingType] = enabled;
-            logger.bridge(`${routingType} routing ${enabled ? 'enabled' : 'disabled'}`);
-        } else {
-            logger.warn(`Unknown routing type: ${routingType}`);
-        }
+        
+        logger.bridge('BridgeCoordinator statistics reset');
     }
 
     /**
      * Cleanup resources
      */
     cleanup() {
-        // Clear references
         this.discordManager = null;
         this.minecraftManager = null;
-
-        // Reset statistics
-        this.resetStatistics();
-
+        
         logger.debug('BridgeCoordinator cleaned up');
     }
 }

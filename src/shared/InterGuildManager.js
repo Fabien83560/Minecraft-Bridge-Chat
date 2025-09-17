@@ -175,7 +175,7 @@ class InterGuildManager {
             if (this._discordManager) {
                 try {
                     await this._discordManager.sendGuildMessage(messageData, sourceGuildConfig);
-                    logger.bridge(`[MC→DC] Sent ${messageData.chatType || 'guild'} message to Discord from ${sourceGuildConfig.name}`);
+                    logger.discord(`[MC→DC] Sent ${messageData.chatType || 'guild'} message to Discord from ${sourceGuildConfig.name}`);
                 } catch (error) {
                     logger.logError(error, `Failed to send message to Discord from ${sourceGuildConfig.name}`);
                 }
@@ -239,7 +239,7 @@ class InterGuildManager {
             if (this._discordManager) {
                 try {
                     await this._discordManager.sendGuildMessage(messageData, sourceGuildConfig);
-                    logger.bridge(`[MC→DC] Sent officer message to Discord from ${sourceGuildConfig.name}`);
+                    logger.discord(`[MC→DC] Sent officer message to Discord from ${sourceGuildConfig.name}`);
                 } catch (error) {
                     logger.logError(error, `Failed to send officer message to Discord from ${sourceGuildConfig.name}`);
                 }
@@ -482,7 +482,7 @@ class InterGuildManager {
             if (this._discordManager) {
                 try {
                     await this._discordManager.sendGuildEvent(eventData, sourceGuildConfig);
-                    logger.bridge(`[MC→DC] Sent ${eventData.type} event to Discord from ${sourceGuildConfig.name}`);
+                    logger.discord(`[MC→DC] Sent ${eventData.type} event to Discord from ${sourceGuildConfig.name}`);
                 } catch (error) {
                     logger.logError(error, `Failed to send event to Discord from ${sourceGuildConfig.name}`);
                 }

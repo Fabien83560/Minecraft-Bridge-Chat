@@ -80,10 +80,10 @@
     "messagesToDiscord": {
       "Hypixel": {
         "guild": {
-          "basic": "**{username}**: {message}",
-          "withTag": "**{username}** `{tag}`: {message}",
-          "withSourceTag": "**[{sourceGuildTag}]** **{username}**: {message}",
-          "withBothTags": "**[{sourceGuildTag}]** **{username}** `{tag}`: {message}",
+          "basic": "{message}",
+          "withTag": "{message}",
+          "withSourceTag": "{message}",
+          "withBothTags": "{message}",
           "embed": {
             "title": "Guild Chat - {guildName}",
             "description": "**{username}**: {message}",
@@ -92,10 +92,10 @@
           }
         },
         "officer": {
-          "basic": "🛡️ **{username}**: {message}",
-          "withTag": "🛡️ **{username}** `{tag}`: {message}",
-          "withSourceTag": "🛡️ **[{sourceGuildTag}]** **{username}**: {message}",
-          "withBothTags": "🛡️ **[{sourceGuildTag}]** **{username}** `{tag}`: {message}",
+          "basic": "🛡️ {message}",
+          "withTag": "🛡️ {message}",
+          "withSourceTag": "🛡️ {message}",
+          "withBothTags": "🛡️ {message}",
           "embed": {
             "title": "🛡️ Officer Chat - {guildName}",
             "description": "**{username}**: {message}",

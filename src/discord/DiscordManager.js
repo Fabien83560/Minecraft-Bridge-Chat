@@ -1,11 +1,16 @@
+// Globals Imports
+const EventEmitter = require('events');
+
 // Specific Imports
 const BridgeLocator = require("../bridgeLocator.js");
 const DiscordBot = require("./client/DiscordBot.js");
 const MessageSender = require("./client/senders/MessageSender.js");
 const logger = require("../shared/logger");
 
-class DiscordManager {
+class DiscordManager extends EventEmitter {
     constructor() {
+        super();
+        
         const mainBridge = BridgeLocator.getInstance();
         this.config = mainBridge.config;
 
@@ -63,13 +68,34 @@ class DiscordManager {
         try {
             logger.discord('Starting Discord connections...');
 
-            // Start Discord bot
+            // Step 1: Start Discord bot and wait for it to be ready
+            logger.debug('[DISCORD] Starting bot...');
             await this._discordBot.start();
 
-            // Initialize message sender with bot client
+            // Step 2: Wait a bit more to ensure bot is fully authenticated
+            await new Promise(resolve => setTimeout(resolve, 1000));
+
+            // Step 3: Check if bot is actually connected and ready
+            if (!this._discordBot.isConnected()) {
+                logger.debug('[DISCORD] Bot connection check failed, attempting to reconnect...');
+                // Try to restart the bot
+                await this._discordBot.stop();
+                await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
+                await this._discordBot.start();
+                
+                if (!this._discordBot.isConnected()) {
+                    throw new Error('Discord bot failed to connect after restart attempt');
+                }
+            }
+
+            logger.debug('[DISCORD] Bot connected, initializing message sender...');
+
+            // Step 4: Initialize message sender with the ready client
             await this._messageSender.initialize(this._discordBot.getClient());
 
-            // Setup event forwarding
+            logger.debug('[DISCORD] Message sender initialized, setting up event forwarding...');
+
+            // Step 5: Setup event forwarding
             this.setupEventForwarding();
 
             this._isStarted = true;
@@ -77,6 +103,15 @@ class DiscordManager {
 
         } catch (error) {
             logger.logError(error, 'Failed to start Discord connections');
+            
+            // Provide helpful error messages for common issues
+            if (error.message.includes('Expected token to be set') || 
+                error.message.includes('token')) {
+                logger.error('❌ Discord token is not configured properly!');
+                logger.error('   Please check your config/settings.json file');
+                logger.error('   Make sure you have set a valid Discord bot token');
+            }
+            
             throw error;
         }
     }
@@ -177,16 +212,18 @@ class DiscordManager {
      */
     async sendGuildMessage(messageData, guildConfig) {
         if (!this._isStarted || !this._messageSender) {
+            logger.debug('[DISCORD] Manager not started, skipping guild message');
             throw new Error('DiscordManager not started');
         }
 
         try {
-            // Determine target channel based on chat type
-            const channelType = messageData.chatType === 'officer' ? 'staff' : 'chat';
-            
-            logger.bridge(`[DISCORD] Sending ${messageData.chatType || 'guild'} message from ${guildConfig.name} to ${channelType} channel`);
+            logger.debug(`[DISCORD] sendGuildMessage called - Guild: ${guildConfig.name}, User: ${messageData.username}, Message: "${messageData.message}"`);
 
-            return await this._messageSender.sendGuildMessage(messageData, guildConfig, channelType);
+            // Send the message
+            const result = await this._messageSender.sendGuildMessage(messageData, guildConfig);
+
+            logger.discord(`[DISCORD] ✅ Guild message sent successfully from ${guildConfig.name}`);
+            return result;
 
         } catch (error) {
             logger.logError(error, `Failed to send guild message to Discord from ${guildConfig.name}`);
@@ -202,13 +239,18 @@ class DiscordManager {
      */
     async sendGuildEvent(eventData, guildConfig) {
         if (!this._isStarted || !this._messageSender) {
+            logger.debug('[DISCORD] Manager not started, skipping guild event');
             throw new Error('DiscordManager not started');
         }
 
         try {
-            logger.bridge(`[DISCORD] Sending ${eventData.type} event from ${guildConfig.name} to chat channel`);
+            logger.debug(`[DISCORD] sendGuildEvent called - Guild: ${guildConfig.name}, Event: ${eventData.type}, User: ${eventData.username || 'system'}`);
 
-            return await this._messageSender.sendGuildEvent(eventData, guildConfig, 'chat');
+            // Send the event
+            const result = await this._messageSender.sendEvent(eventData, guildConfig);
+
+            logger.discord(`[DISCORD] ✅ Guild event sent successfully from ${guildConfig.name}`);
+            return result;
 
         } catch (error) {
             logger.logError(error, `Failed to send guild event to Discord from ${guildConfig.name}`);
@@ -226,13 +268,18 @@ class DiscordManager {
      */
     async sendSystemMessage(type, data, guildConfig, channelType = 'chat') {
         if (!this._isStarted || !this._messageSender) {
+            logger.debug('[DISCORD] Manager not started, skipping system message');
             throw new Error('DiscordManager not started');
         }
 
         try {
-            logger.bridge(`[DISCORD] Sending system message ${type} from ${guildConfig.name} to ${channelType} channel`);
+            logger.debug(`[DISCORD] sendSystemMessage called - Type: ${type}, Guild: ${guildConfig.name}, Channel: ${channelType}`);
 
-            return await this._messageSender.sendSystemMessage(type, data, guildConfig, channelType);
+            // Send the system message
+            const result = await this._messageSender.sendSystemMessage(type, data, channelType);
+
+            logger.discord(`[DISCORD] ✅ System message sent successfully from ${guildConfig.name}`);
+            return result;
 
         } catch (error) {
             logger.logError(error, `Failed to send system message to Discord from ${guildConfig.name}`);
@@ -243,13 +290,13 @@ class DiscordManager {
     /**
      * Send connection status to Discord
      * @param {string} guildId - Guild ID
-     * @param {string} status - Connection status
+     * @param {string} status - Connection status  
      * @param {object} details - Additional details
      * @returns {Promise} Send promise
      */
     async sendConnectionStatus(guildId, status, details = {}) {
         if (!this._isStarted || !this._messageSender) {
-            logger.debug('DiscordManager not started, skipping connection status');
+            logger.debug('[DISCORD] Manager not started, skipping connection status');
             return;
         }
 
@@ -260,9 +307,13 @@ class DiscordManager {
                 return;
             }
 
-            logger.bridge(`[DISCORD] Sending connection status for ${guildConfig.name}: ${status}`);
+            logger.debug(`[DISCORD] sendConnectionStatus called - Guild: ${guildConfig.name}, Status: ${status}`);
 
-            return await this._messageSender.sendConnectionStatus(status, guildConfig, details);
+            // Send the connection status
+            const result = await this._messageSender.sendConnectionStatus(status, guildConfig, details);
+
+            logger.discord(`[DISCORD] ✅ Connection status sent successfully for ${guildConfig.name}: ${status}`);
+            return result;
 
         } catch (error) {
             logger.logError(error, `Failed to send connection status to Discord for guild ${guildId}`);
@@ -273,20 +324,25 @@ class DiscordManager {
 
     onMessage(callback) {
         this.messageHandlers.push(callback);
+        logger.debug(`[DISCORD] Message handler registered (total: ${this.messageHandlers.length})`);
     }
 
     onConnection(callback) {
         this.connectionHandlers.push(callback);
+        logger.debug(`[DISCORD] Connection handler registered (total: ${this.connectionHandlers.length})`);
     }
 
     onError(callback) {
         this.errorHandlers.push(callback);
+        logger.debug(`[DISCORD] Error handler registered (total: ${this.errorHandlers.length})`);
     }
 
     // ==================== STATUS METHODS ====================
 
     isConnected() {
-        return this._discordBot ? this._discordBot.isConnected() : false;
+        const connected = this._discordBot ? this._discordBot.isConnected() : false;
+        logger.debug(`[DISCORD] Connection status checked: ${connected}`);
+        return connected;
     }
 
     getConnectionStatus() {
@@ -402,6 +458,24 @@ class DiscordManager {
         logger.warn('Discord configuration update requires restart');
         // For now, just log the request
         logger.debug('Discord config update requested:', newConfig);
+    }
+
+    /**
+     * Get debugging information
+     */
+    getDebugInfo() {
+        return {
+            isInitialized: this._isInitialized,
+            isStarted: this._isStarted,
+            isConnected: this.isConnected(),
+            hasBotInstance: !!this._discordBot,
+            hasMessageSender: !!this._messageSender,
+            messageHandlers: this.messageHandlers.length,
+            connectionHandlers: this.connectionHandlers.length,
+            errorHandlers: this.errorHandlers.length,
+            botInfo: this.getBotInfo(),
+            connectionStatus: this.getConnectionStatus()
+        };
     }
 }
 

@@ -16,8 +16,8 @@ class DiscordBot extends EventEmitter {
         this.config = mainBridge.config;
 
         this.client = null;
-        this.isConnected = false;
-        this.isReady = false;
+        this._isConnected = false;
+        this._isReady = false;
         this.connectionAttempts = 0;
         this.maxConnectionAttempts = 5;
         this.reconnectTimeout = null;
@@ -51,7 +51,7 @@ class DiscordBot extends EventEmitter {
                 ]
             });
 
-            // Initialize handlers
+            // Initialize handlers (but don't initialize them with client yet)
             this.messageHandler = new MessageHandler();
             this.commandHandler = new CommandHandler();
 
@@ -65,74 +65,11 @@ class DiscordBot extends EventEmitter {
         }
     }
 
-    async start() {
-        if (this.isConnected) {
-            logger.warn('Discord bot is already connected');
-            return;
-        }
-
-        try {
-            this.connectionAttempts++;
-            this.stats.startTime = Date.now();
-
-            logger.discord(`Starting Discord bot (attempt ${this.connectionAttempts}/${this.maxConnectionAttempts})`);
-
-            const token = this.config.get('app.token');
-            if (!token) {
-                throw new Error('Discord bot token not found in configuration');
-            }
-
-            await this.client.login(token);
-
-            // Wait for ready event
-            await this.waitForReady();
-
-            this.connectionAttempts = 0; // Reset on successful connection
-            logger.discord('✅ Discord bot started successfully');
-
-        } catch (error) {
-            logger.logError(error, `Discord bot start failed (attempt ${this.connectionAttempts})`);
-            
-            if (this.connectionAttempts >= this.maxConnectionAttempts) {
-                logger.discord(`❌ Max connection attempts reached for Discord bot`);
-                throw new Error(`Max Discord connection attempts (${this.maxConnectionAttempts}) reached`);
-            }
-
-            // Schedule reconnection
-            this.scheduleReconnection();
-            throw error;
-        }
-    }
-
-    async waitForReady() {
-        return new Promise((resolve, reject) => {
-            const timeout = setTimeout(() => {
-                reject(new Error('Discord bot ready timeout after 30 seconds'));
-            }, 30000);
-
-            if (this.isReady) {
-                clearTimeout(timeout);
-                resolve();
-                return;
-            }
-
-            this.client.once('ready', () => {
-                clearTimeout(timeout);
-                resolve();
-            });
-
-            this.client.once('error', (error) => {
-                clearTimeout(timeout);
-                reject(error);
-            });
-        });
-    }
-
     setupEventHandlers() {
         // Ready event
-        this.client.on('ready', () => {
-            this.isConnected = true;
-            this.isReady = true;
+        this.client.on('ready', async () => {
+            this._isConnected = true;
+            this._isReady = true;
             
             const botInfo = {
                 username: this.client.user.username,
@@ -143,22 +80,31 @@ class DiscordBot extends EventEmitter {
 
             logger.discord(`✅ Discord bot logged in as ${botInfo.tag}`);
 
-            // Set bot activity/status
-            this.setBotActivity();
+            try {
+                // Initialize handlers with the Discord client now that it's ready
+                await this.initializeHandlers();
 
-            // Emit connection event
-            this.emit('connection', {
-                type: 'connected',
-                bot: botInfo,
-                guilds: this.client.guilds.cache.size,
-                users: this.client.users.cache.size
-            });
+                // Set bot activity/status
+                this.setBotActivity();
+
+                // Emit connection event
+                this.emit('connection', {
+                    type: 'connected',
+                    bot: botInfo,
+                    guilds: this.client.guilds.cache.size,
+                    users: this.client.users.cache.size
+                });
+
+            } catch (error) {
+                logger.logError(error, 'Failed to initialize handlers after Discord ready');
+                this.emit('error', error);
+            }
         });
 
         // Disconnect event
         this.client.on('disconnect', () => {
-            this.isConnected = false;
-            this.isReady = false;
+            this._isConnected = false;
+            this._isReady = false;
             
             logger.discord('🔴 Discord bot disconnected');
             
@@ -183,124 +129,204 @@ class DiscordBot extends EventEmitter {
             logger.warn(`Discord bot warning: ${warning}`);
         });
 
-        // Debug event (only in debug mode)
-        if (this.config.get('features.logging.level') === 'debug') {
-            this.client.on('debug', (info) => {
-                logger.debug(`Discord: ${info}`);
-            });
-        }
+        // Message event - handle both regular messages and commands
+        this.client.on('messageCreate', async (message) => {
+            this.stats.messagesReceived++;
+            
+            if (!this._isReady) return;
 
-        // Rate limit event
+            // Check if message is a command
+            const commandPrefix = this.config.get('bridge.commandPrefix') || '!';
+            
+            if (message.content.startsWith(commandPrefix)) {
+                // Handle command
+                if (this.commandHandler) {
+                    const commandString = message.content.substring(commandPrefix.length).trim();
+                    await this.commandHandler.processCommand(message, commandString);
+                    this.stats.commandsProcessed++;
+                }
+            } else {
+                // Handle regular message
+                if (this.messageHandler) {
+                    await this.messageHandler.handleMessage(message);
+                }
+            }
+        });
+
+        // Guild member add
+        this.client.on('guildMemberAdd', (member) => {
+            logger.debug(`New member joined: ${member.user.tag}`);
+            this.emit('memberJoin', member);
+        });
+
+        // Guild member remove
+        this.client.on('guildMemberRemove', (member) => {
+            logger.debug(`Member left: ${member.user.tag}`);
+            this.emit('memberLeave', member);
+        });
+
+        // Rate limit handling
         this.client.on('rateLimit', (info) => {
             logger.warn(`Discord rate limit hit: ${JSON.stringify(info)}`);
         });
 
-        // Message event
-        this.client.on('messageCreate', async (message) => {
-            try {
-                this.stats.messagesReceived++;
-                await this.handleMessage(message);
-            } catch (error) {
-                logger.logError(error, 'Error handling Discord message');
-            }
+        // Shard events
+        this.client.on('shardError', (error) => {
+            logger.logError(error, 'Discord shard error');
         });
 
-        // Guild events
-        this.client.on('guildCreate', (guild) => {
-            logger.discord(`Joined Discord guild: ${guild.name} (${guild.id})`);
-        });
-
-        this.client.on('guildDelete', (guild) => {
-            logger.discord(`Left Discord guild: ${guild.name} (${guild.id})`);
+        this.client.on('shardReady', () => {
+            logger.debug('Discord shard ready');
         });
     }
 
-    async handleMessage(message) {
-        // Ignore bot messages
-        if (message.author.bot) return;
-
-        const bridgeConfig = this.config.get('bridge');
-        const chatChannelId = bridgeConfig.channels.chat.id;
-        const staffChannelId = bridgeConfig.channels.staff.id;
-
-        // Check if message is in a bridge channel
-        if (message.channel.id === chatChannelId || message.channel.id === staffChannelId) {
-            // Handle bridge channel message
-            const messageData = await this.messageHandler.handleBridgeMessage(message);
-            if (messageData) {
-                this.emit('message', {
-                    type: 'bridge_message',
-                    data: messageData,
-                    channel: message.channel.id === chatChannelId ? 'chat' : 'staff'
+    /**
+     * Initialize handlers with Discord client
+     */
+    async initializeHandlers() {
+        try {
+            // Initialize message handler
+            if (this.messageHandler) {
+                await this.messageHandler.initialize(this.client);
+                
+                // Set up message handler event forwarding
+                this.messageHandler.on('message', (data) => {
+                    this.emit('message', data);
+                });
+                
+                this.messageHandler.on('command', (data) => {
+                    this.emit('command', data);
                 });
             }
-        }
 
-        // Check for commands
-        const commandResult = await this.commandHandler.handleCommand(message);
-        if (commandResult) {
-            this.stats.commandsProcessed++;
-            this.emit('command', commandResult);
+            // Initialize command handler
+            if (this.commandHandler) {
+                await this.commandHandler.initialize(this.client);
+            }
+
+            logger.discord('Discord bot handlers initialized');
+
+        } catch (error) {
+            logger.logError(error, 'Failed to initialize Discord bot handlers');
+            throw error;
         }
     }
 
     setBotActivity() {
         try {
-            const enabledGuilds = this.config.getEnabledGuilds();
-            const guildCount = enabledGuilds.length;
+            const activityConfig = this.config.get('bridge.activity') || {};
             
-            this.client.user.setActivity(`${guildCount} Minecraft guilds`, {
-                type: ActivityType.Watching
-            });
+            if (activityConfig.enabled !== false) {
+                const activity = {
+                    name: activityConfig.name || 'Minecraft Bridge',
+                    type: ActivityType[activityConfig.type] || ActivityType.Playing
+                };
 
-            this.client.user.setStatus('online');
-            
-            logger.debug(`Discord bot activity set: Watching ${guildCount} Minecraft guilds`);
+                this.client.user.setActivity(activity.name, { type: activity.type });
+                logger.debug(`Set bot activity: ${activity.name} (${activity.type})`);
+            }
 
         } catch (error) {
-            logger.logError(error, 'Failed to set Discord bot activity');
+            logger.logError(error, 'Failed to set bot activity');
         }
     }
 
-    scheduleReconnection() {
-        if (this.reconnectTimeout) {
-            clearTimeout(this.reconnectTimeout);
-        }
+    async start() {
+        try {
+            logger.discord('Starting Discord bot...');
 
-        const delay = Math.min(5000 * this.connectionAttempts, 60000); // Max 1 minute delay
-        
-        logger.discord(`Scheduling Discord reconnection in ${delay}ms`);
-
-        this.reconnectTimeout = setTimeout(async () => {
-            try {
-                this.stats.reconnections++;
-                await this.start();
-            } catch (error) {
-                logger.logError(error, 'Discord reconnection failed');
+            const token = this.config.get('app.token');
+            if (!token) {
+                throw new Error('Discord bot token not configured');
             }
-        }, delay);
+
+            // Reset connection state before starting
+            this._isConnected = false;
+            this._isReady = false;
+
+            this.connectionAttempts++;
+            logger.discord(`Starting Discord bot (attempt ${this.connectionAttempts}/${this.maxConnectionAttempts})`);
+
+            this.stats.startTime = Date.now();
+
+            // Check if client already exists and is connected
+            if (this.client && this.client.readyTimestamp) {
+                logger.debug('Discord client appears to be connected already, checking status...');
+                
+                // Test if client is actually working
+                try {
+                    await this.client.user.fetch();
+                    this._isConnected = true;
+                    this._isReady = true;
+                    logger.discord('✅ Discord bot was already connected and working');
+                    return;
+                } catch (error) {
+                    logger.debug('Existing client not working, will reconnect');
+                    // Destroy the existing client
+                    this.client.destroy();
+                    this.client = null;
+                }
+            }
+
+            // Create fresh client if needed
+            if (!this.client) {
+                this.initializeClient();
+            }
+
+            // Login to Discord
+            await this.client.login(token);
+
+            // Wait for ready event with timeout
+            await this.waitForReady(30000); // 30 second timeout
+
+            logger.discord('✅ Discord bot started successfully');
+
+        } catch (error) {
+            logger.logError(error, `Failed to start Discord bot (attempt ${this.connectionAttempts}/${this.maxConnectionAttempts})`);
+            
+            if (this.connectionAttempts < this.maxConnectionAttempts) {
+                this.scheduleReconnection();
+            } else {
+                logger.error('Max connection attempts reached. Discord bot startup failed.');
+                this.emit('error', new Error('Max connection attempts reached'));
+            }
+            
+            throw error;
+        }
     }
 
     async stop() {
+        if (!this._isConnected && !this.client) {
+            logger.debug('Discord bot not connected, nothing to stop');
+            return;
+        }
+
         try {
+            logger.discord('Stopping Discord bot...');
+
+            // Clear reconnection timeout
             if (this.reconnectTimeout) {
                 clearTimeout(this.reconnectTimeout);
                 this.reconnectTimeout = null;
             }
 
-            if (this.client && this.isConnected) {
-                logger.discord('Stopping Discord bot...');
-                
-                // Set offline status before destroying
-                if (this.client.user) {
-                    await this.client.user.setStatus('invisible');
-                }
+            // Cleanup handlers
+            if (this.messageHandler) {
+                this.messageHandler.cleanup();
+            }
 
+            if (this.commandHandler) {
+                this.commandHandler.cleanup();
+            }
+
+            // Destroy Discord client
+            if (this.client) {
                 this.client.destroy();
             }
 
-            this.isConnected = false;
-            this.isReady = false;
+            this._isConnected = false;
+            this._isReady = false;
+            this.connectionAttempts = 0;
 
             logger.discord('✅ Discord bot stopped');
 
@@ -310,6 +336,55 @@ class DiscordBot extends EventEmitter {
         }
     }
 
+    scheduleReconnection() {
+        if (this.reconnectTimeout) {
+            return; // Reconnection already scheduled
+        }
+
+        if (this.connectionAttempts >= this.maxConnectionAttempts) {
+            logger.error('Max reconnection attempts reached. Giving up.');
+            return;
+        }
+
+        const delay = Math.min(5000 * this.connectionAttempts, 30000); // Exponential backoff, max 30s
+        
+        logger.discord(`Scheduling Discord reconnection in ${delay}ms (attempt ${this.connectionAttempts + 1}/${this.maxConnectionAttempts})`);
+        
+        this.reconnectTimeout = setTimeout(async () => {
+            this.reconnectTimeout = null;
+            this.stats.reconnections++;
+            
+            try {
+                await this.start();
+            } catch (error) {
+                logger.logError(error, 'Reconnection failed');
+            }
+        }, delay);
+    }
+
+    waitForReady(timeout = 10000) {
+        return new Promise((resolve, reject) => {
+            if (this._isReady) {
+                resolve();
+                return;
+            }
+
+            const timeoutHandle = setTimeout(() => {
+                reject(new Error('Discord bot ready timeout'));
+            }, timeout);
+
+            this.client.once('ready', () => {
+                clearTimeout(timeoutHandle);
+                resolve();
+            });
+
+            this.client.once('error', (error) => {
+                clearTimeout(timeoutHandle);
+                reject(error);
+            });
+        });
+    }
+
     // ==================== GETTER METHODS ====================
 
     getClient() {
@@ -317,15 +392,17 @@ class DiscordBot extends EventEmitter {
     }
 
     isConnected() {
-        return this.isConnected && this.isReady;
+        return this._isConnected && this._isReady;
     }
 
     getConnectionStatus() {
         return {
-            connected: this.isConnected,
-            ready: this.isReady,
-            connectionAttempts: this.connectionAttempts,
-            uptime: this.stats.startTime ? Date.now() - this.stats.startTime : 0
+            connected: this._isConnected,
+            ready: this._isReady,
+            attempts: this.connectionAttempts,
+            maxAttempts: this.maxConnectionAttempts,
+            guilds: this.client ? this.client.guilds.cache.size : 0,
+            users: this.client ? this.client.users.cache.size : 0
         };
     }
 
@@ -340,94 +417,39 @@ class DiscordBot extends EventEmitter {
             discriminator: this.client.user.discriminator,
             tag: this.client.user.tag,
             avatar: this.client.user.displayAvatarURL(),
-            guilds: this.client.guilds.cache.size,
-            users: this.client.users.cache.size,
-            channels: this.client.channels.cache.size
+            verified: this.client.user.verified,
+            bot: this.client.user.bot
         };
     }
 
     getStatistics() {
         const uptime = this.stats.startTime ? Date.now() - this.stats.startTime : 0;
-        
+
         return {
             ...this.stats,
             uptime: uptime,
-            connected: this.isConnected,
-            ready: this.isReady,
+            connected: this._isConnected,
+            ready: this._isReady,
             connectionAttempts: this.connectionAttempts,
-            ping: this.client ? this.client.ws.ping : -1
+            guilds: this.client ? this.client.guilds.cache.size : 0,
+            users: this.client ? this.client.users.cache.size : 0,
+            channels: this.client ? this.client.channels.cache.size : 0,
+            ping: this.client ? this.client.ws.ping : null,
+            handlers: {
+                messageHandler: !!this.messageHandler,
+                commandHandler: !!this.commandHandler
+            }
         };
     }
 
-    // ==================== UTILITY METHODS ====================
-
-    /**
-     * Get Discord channel by ID
-     * @param {string} channelId - Channel ID
-     * @returns {Channel|null} Discord channel or null
-     */
-    getChannel(channelId) {
-        if (!this.client) return null;
-        
-        try {
-            return this.client.channels.cache.get(channelId);
-        } catch (error) {
-            logger.logError(error, `Failed to get Discord channel: ${channelId}`);
-            return null;
-        }
-    }
-
-    /**
-     * Get Discord guild by ID
-     * @param {string} guildId - Guild ID
-     * @returns {Guild|null} Discord guild or null
-     */
-    getGuild(guildId) {
-        if (!this.client) return null;
-        
-        try {
-            return this.client.guilds.cache.get(guildId);
-        } catch (error) {
-            logger.logError(error, `Failed to get Discord guild: ${guildId}`);
-            return null;
-        }
-    }
-
-    /**
-     * Update bot activity
-     * @param {string} activity - Activity text
-     * @param {string} type - Activity type
-     */
-    async updateActivity(activity, type = 'WATCHING') {
-        if (!this.client || !this.client.user) return;
-
-        try {
-            await this.client.user.setActivity(activity, { type: ActivityType[type] });
-            logger.debug(`Discord bot activity updated: ${type} ${activity}`);
-        } catch (error) {
-            logger.logError(error, 'Failed to update Discord bot activity');
-        }
-    }
-
-    /**
-     * Update bot status
-     * @param {string} status - Status (online, idle, dnd, invisible)
-     */
-    async updateStatus(status) {
-        if (!this.client || !this.client.user) return;
-
-        try {
-            await this.client.user.setStatus(status);
-            logger.debug(`Discord bot status updated: ${status}`);
-        } catch (error) {
-            logger.logError(error, 'Failed to update Discord bot status');
-        }
-    }
-
-    // ==================== EVENT FORWARDING ====================
+    // ==================== EVENT FORWARDING METHODS ====================
 
     onMessage(callback) {
         this.on('message', callback);
+    }
+
+    onCommand(callback) {
+        this.on('command', callback);
     }
 
     onConnection(callback) {
@@ -438,8 +460,12 @@ class DiscordBot extends EventEmitter {
         this.on('error', callback);
     }
 
-    onCommand(callback) {
-        this.on('command', callback);
+    onMemberJoin(callback) {
+        this.on('memberJoin', callback);
+    }
+
+    onMemberLeave(callback) {
+        this.on('memberLeave', callback);
     }
 }
 

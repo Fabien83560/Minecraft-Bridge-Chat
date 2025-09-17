@@ -1,781 +1,500 @@
+// Globals Imports
+const { EmbedBuilder: DiscordEmbedBuilder, PermissionsBitField } = require('discord.js');
+const EventEmitter = require('events');
+
 // Specific Imports
 const BridgeLocator = require("../../../bridgeLocator.js");
-const AdminCommands = require("../../../shared/AdminCommands.js");
-const EmbedBuilder = require("../../utils/EmbedBuilder.js");
 const logger = require("../../../shared/logger");
 
-class CommandHandler {
+class CommandHandler extends EventEmitter {
     constructor() {
+        super();
+
         const mainBridge = BridgeLocator.getInstance();
         this.config = mainBridge.config;
 
-        this.embedBuilder = new EmbedBuilder();
-        this.adminCommands = new AdminCommands();
-
+        this.client = null;
+        this.commands = new Map();
+        
         // Command configuration
-        this.prefix = '!bridge'; // Default command prefix
-        this.allowedChannels = new Set([
-            this.config.get('bridge.channels.chat.id'),
-            this.config.get('bridge.channels.staff.id')
-        ]);
-
-        // Command cooldowns (userId -> lastUsed timestamp)
-        this.cooldowns = new Map();
-        this.cooldownTime = 5000; // 5 seconds
-
+        this.commandPrefix = this.config.get('bridge.commandPrefix') || '!';
+        this.adminRoles = this.config.get('bridge.adminRoles') || [];
+        this.modRoles = this.config.get('bridge.modRoles') || [];
+        
         // Statistics
         this.stats = {
             commandsProcessed: 0,
-            adminCommandsProcessed: 0,
-            cooldownHits: 0,
+            invalidCommands: 0,
             unauthorizedAttempts: 0,
             errors: 0
         };
 
-        // Available commands
-        this.commands = new Map([
-            ['status', {
-                description: 'Show system status',
-                usage: '!bridge status',
-                permission: 'admin',
-                execute: this.handleStatusCommand.bind(this)
-            }],
-            ['stats', {
-                description: 'Show detailed statistics',
-                usage: '!bridge stats [category]',
-                permission: 'admin',
-                execute: this.handleStatsCommand.bind(this)
-            }],
-            ['health', {
-                description: 'Show system health',
-                usage: '!bridge health',
-                permission: 'admin',
-                execute: this.handleHealthCommand.bind(this)
-            }],
-            ['connections', {
-                description: 'Show Minecraft connection status',
-                usage: '!bridge connections',
-                permission: 'admin',
-                execute: this.handleConnectionsCommand.bind(this)
-            }],
-            ['interguild', {
-                description: 'Manage inter-guild system',
-                usage: '!bridge interguild <status|enable|disable|clear>',
-                permission: 'admin',
-                execute: this.handleInterGuildCommand.bind(this)
-            }],
-            ['test', {
-                description: 'Test bot functionality',
-                usage: '!bridge test [type]',
-                permission: 'admin',
-                execute: this.handleTestCommand.bind(this)
-            }],
-            ['help', {
-                description: 'Show available commands',
-                usage: '!bridge help [command]',
-                permission: 'user',
-                execute: this.handleHelpCommand.bind(this)
-            }],
-            ['ping', {
-                description: 'Check bot responsiveness',
-                usage: '!bridge ping',
-                permission: 'user',
-                execute: this.handlePingCommand.bind(this)
-            }]
-        ]);
-
-        logger.debug('Discord CommandHandler initialized');
+        // Initialize commands
+        this.initializeCommands();
     }
 
     /**
-     * Handle Discord command message
-     * @param {Message} message - Discord message object
-     * @returns {object|null} Command result or null
+     * Initialize with Discord client
+     * @param {Client} client - Discord client instance
      */
-    async handleCommand(message) {
+    async initialize(client) {
+        if (!client) {
+            throw new Error('Discord client is required for CommandHandler initialization');
+        }
+
+        this.client = client;
+
         try {
-            // Check if message starts with command prefix
-            if (!message.content.startsWith(this.prefix)) {
-                return null;
-            }
+            logger.discord('CommandHandler initialized with Discord client');
 
-            // Check if command is in allowed channel
-            if (!this.allowedChannels.has(message.channel.id)) {
-                return null;
-            }
+        } catch (error) {
+            logger.logError(error, 'Failed to initialize CommandHandler with client');
+            throw error;
+        }
+    }
 
-            // Parse command
-            const args = message.content.slice(this.prefix.length).trim().split(/\s+/);
-            const commandName = args.shift().toLowerCase();
+    /**
+     * Initialize available commands
+     */
+    initializeCommands() {
+        // Basic bridge commands
+        this.registerCommand('status', {
+            description: 'Show bridge status',
+            usage: `${this.commandPrefix}status`,
+            permission: 'user',
+            handler: this.handleStatusCommand.bind(this)
+        });
 
-            if (!commandName) {
-                return null;
-            }
+        this.registerCommand('help', {
+            description: 'Show available commands',
+            usage: `${this.commandPrefix}help [command]`,
+            permission: 'user',
+            handler: this.handleHelpCommand.bind(this)
+        });
 
-            // Check if command exists
+        this.registerCommand('stats', {
+            description: 'Show detailed statistics',
+            usage: `${this.commandPrefix}stats`,
+            permission: 'mod',
+            handler: this.handleStatsCommand.bind(this)
+        });
+
+        this.registerCommand('reload', {
+            description: 'Reload bridge configuration',
+            usage: `${this.commandPrefix}reload`,
+            permission: 'admin',
+            handler: this.handleReloadCommand.bind(this)
+        });
+
+        this.registerCommand('test', {
+            description: 'Send test message to verify bridge functionality',
+            usage: `${this.commandPrefix}test`,
+            permission: 'mod',
+            handler: this.handleTestCommand.bind(this)
+        });
+
+        logger.debug(`CommandHandler initialized with ${this.commands.size} commands`);
+    }
+
+    /**
+     * Register a command
+     * @param {string} name - Command name
+     * @param {object} commandConfig - Command configuration
+     */
+    registerCommand(name, commandConfig) {
+        this.commands.set(name.toLowerCase(), {
+            name: name.toLowerCase(),
+            ...commandConfig
+        });
+    }
+
+    /**
+     * Process a command message
+     * @param {Message} message - Discord message object
+     * @param {string} commandString - Command string without prefix
+     */
+    async processCommand(message, commandString) {
+        try {
+            this.stats.commandsProcessed++;
+
+            const args = commandString.split(' ');
+            const commandName = args[0].toLowerCase();
+            const commandArgs = args.slice(1);
+
             const command = this.commands.get(commandName);
-            if (!command) {
-                await this.sendErrorMessage(message, `Unknown command: ${commandName}`, 'Use `!bridge help` for available commands');
-                return null;
-            }
 
-            // Check cooldown
-            if (this.isOnCooldown(message.author.id)) {
-                this.stats.cooldownHits++;
-                await this.sendErrorMessage(message, 'Command on cooldown', `Please wait ${Math.ceil(this.cooldownTime / 1000)} seconds between commands`);
-                return null;
+            if (!command) {
+                this.stats.invalidCommands++;
+                await this.sendErrorMessage(message, `Unknown command: ${commandName}. Use \`${this.commandPrefix}help\` for available commands.`);
+                return;
             }
 
             // Check permissions
-            if (!this.hasPermission(message, command.permission)) {
+            if (!this.hasPermission(message.member, command.permission)) {
                 this.stats.unauthorizedAttempts++;
-                await this.sendErrorMessage(message, 'Insufficient permissions', 'You do not have permission to use this command');
-                return null;
+                await this.sendErrorMessage(message, 'You do not have permission to use this command.');
+                return;
             }
-
-            logger.discord(`Processing command: ${commandName} from ${message.author.tag}`);
 
             // Execute command
-            const result = await command.execute(message, args);
+            await command.handler(message, commandArgs);
 
-            // Update cooldown
-            this.updateCooldown(message.author.id);
-            this.stats.commandsProcessed++;
-
-            if (command.permission === 'admin') {
-                this.stats.adminCommandsProcessed++;
-            }
-
-            return {
-                command: commandName,
-                args: args,
-                user: message.author.tag,
-                channel: message.channel.id,
-                result: result,
-                success: true
-            };
+            logger.discord(`[DISCORD] Command executed: ${commandName} by ${message.author.displayName}`);
 
         } catch (error) {
             this.stats.errors++;
-            logger.logError(error, `Error handling Discord command from ${message.author?.tag || 'unknown'}`);
-            
-            await this.sendErrorMessage(message, 'Command execution failed', error.message);
-            
-            return {
-                command: commandName || 'unknown',
-                user: message.author?.tag || 'unknown',
-                error: error.message,
-                success: false
-            };
+            logger.logError(error, `Error processing command: ${commandString}`);
+            await this.sendErrorMessage(message, 'An error occurred while processing the command.');
         }
     }
 
-    // ==================== COMMAND IMPLEMENTATIONS ====================
+    // ==================== COMMAND HANDLERS ====================
 
     /**
      * Handle status command
+     * @param {Message} message - Discord message
+     * @param {Array} args - Command arguments
      */
     async handleStatusCommand(message, args) {
         try {
-            const result = await this.adminCommands.executeCommand('status');
+            const mainBridge = BridgeLocator.getInstance();
             
-            if (result.success) {
-                const statusData = result.result;
-                const embed = this.createStatusEmbed(statusData);
-                await message.reply({ embeds: [embed] });
-            } else {
-                await this.sendErrorMessage(message, 'Status command failed', result.error);
-            }
-
-            return result;
-
-        } catch (error) {
-            logger.logError(error, 'Status command execution failed');
-            throw error;
-        }
-    }
-
-    /**
-     * Handle stats command
-     */
-    async handleStatsCommand(message, args) {
-        try {
-            const category = args[0] || '';
-            const commandLine = category ? `stats ${category}` : 'stats';
-            const result = await this.adminCommands.executeCommand(commandLine);
-
-            if (result.success) {
-                const statsData = result.result;
-                const embed = this.createStatsEmbed(statsData, category);
-                await message.reply({ embeds: [embed] });
-            } else {
-                await this.sendErrorMessage(message, 'Stats command failed', result.error);
-            }
-
-            return result;
-
-        } catch (error) {
-            logger.logError(error, 'Stats command execution failed');
-            throw error;
-        }
-    }
-
-    /**
-     * Handle health command
-     */
-    async handleHealthCommand(message, args) {
-        try {
-            const result = await this.adminCommands.executeCommand('health');
-
-            if (result.success) {
-                const healthData = result.result;
-                const embed = this.createHealthEmbed(healthData);
-                await message.reply({ embeds: [embed] });
-            } else {
-                await this.sendErrorMessage(message, 'Health command failed', result.error);
-            }
-
-            return result;
-
-        } catch (error) {
-            logger.logError(error, 'Health command execution failed');
-            throw error;
-        }
-    }
-
-    /**
-     * Handle connections command
-     */
-    async handleConnectionsCommand(message, args) {
-        try {
-            const result = await this.adminCommands.executeCommand('connections');
-
-            if (result.success) {
-                const connectionData = result.result;
-                const embed = this.createConnectionsEmbed(connectionData);
-                await message.reply({ embeds: [embed] });
-            } else {
-                await this.sendErrorMessage(message, 'Connections command failed', result.error);
-            }
-
-            return result;
-
-        } catch (error) {
-            logger.logError(error, 'Connections command execution failed');
-            throw error;
-        }
-    }
-
-    /**
-     * Handle inter-guild command
-     */
-    async handleInterGuildCommand(message, args) {
-        try {
-            const action = args[0];
-            if (!action) {
-                await this.sendErrorMessage(message, 'Missing action', 'Available actions: status, enable, disable, clear');
-                return { success: false, error: 'Missing action' };
-            }
-
-            const commandLine = `interguild ${action}`;
-            const result = await this.adminCommands.executeCommand(commandLine);
-
-            if (result.success) {
-                const embed = this.embedBuilder.createInfoEmbed(
-                    '🌉 Inter-Guild Management',
-                    result.result.message || JSON.stringify(result.result, null, 2),
-                    'system'
-                );
-                await message.reply({ embeds: [embed] });
-            } else {
-                await this.sendErrorMessage(message, 'Inter-guild command failed', result.error);
-            }
-
-            return result;
-
-        } catch (error) {
-            logger.logError(error, 'Inter-guild command execution failed');
-            throw error;
-        }
-    }
-
-    /**
-     * Handle test command
-     */
-    async handleTestCommand(message, args) {
-        try {
-            const testType = args[0] || 'basic';
+            // Get status information
+            const discordStatus = mainBridge.getDiscordManager?.()?.getConnectionStatus() || { connected: false };
+            const minecraftStatus = mainBridge.getMinecraftManager?.()?.getConnectionStatus() || { connected: false };
             
-            let result;
-            switch (testType) {
-                case 'discord':
-                    result = await this.testDiscordFunctionality();
-                    break;
-                case 'minecraft':
-                    result = await this.testMinecraftConnections();
-                    break;
-                case 'interguild':
-                    result = await this.testInterGuildSystem();
-                    break;
-                default:
-                    result = await this.testBasicFunctionality();
-                    break;
-            }
+            const embed = new DiscordEmbedBuilder()
+                .setTitle('🌉 Bridge Status')
+                .setColor(discordStatus.connected && minecraftStatus.connections?.length > 0 ? 0x00FF00 : 0xFFFF00)
+                .setTimestamp();
 
-            const embed = this.createTestResultEmbed(testType, result);
+            // Discord status
+            embed.addFields({
+                name: '💬 Discord',
+                value: discordStatus.connected ? '✅ Connected' : '❌ Disconnected',
+                inline: true
+            });
+
+            // Minecraft status
+            const mcConnections = minecraftStatus.connections?.length || 0;
+            embed.addFields({
+                name: '🎮 Minecraft',
+                value: mcConnections > 0 ? `✅ ${mcConnections} connections` : '❌ No connections',
+                inline: true
+            });
+
+            // Uptime
+            const uptime = process.uptime();
+            const uptimeStr = this.formatUptime(uptime);
+            embed.addFields({
+                name: '⏰ Uptime',
+                value: uptimeStr,
+                inline: true
+            });
+
             await message.reply({ embeds: [embed] });
 
-            return { success: true, testType: testType, result: result };
-
         } catch (error) {
-            logger.logError(error, 'Test command execution failed');
-            throw error;
+            logger.logError(error, 'Error handling status command');
+            await this.sendErrorMessage(message, 'Failed to get status information.');
         }
     }
 
     /**
      * Handle help command
+     * @param {Message} message - Discord message
+     * @param {Array} args - Command arguments
      */
     async handleHelpCommand(message, args) {
         try {
-            const commandName = args[0];
-
-            if (commandName) {
+            if (args.length > 0) {
                 // Show help for specific command
+                const commandName = args[0].toLowerCase();
                 const command = this.commands.get(commandName);
+
                 if (!command) {
-                    await this.sendErrorMessage(message, 'Command not found', `Command '${commandName}' does not exist`);
-                    return { success: false, error: 'Command not found' };
+                    await this.sendErrorMessage(message, `Command not found: ${commandName}`);
+                    return;
                 }
 
-                const embed = this.createCommandHelpEmbed(commandName, command);
+                const embed = new DiscordEmbedBuilder()
+                    .setTitle(`📖 Help: ${command.name}`)
+                    .setDescription(command.description)
+                    .addFields(
+                        { name: 'Usage', value: `\`${command.usage}\``, inline: false },
+                        { name: 'Permission', value: command.permission, inline: true }
+                    )
+                    .setColor(0x0099FF)
+                    .setTimestamp();
+
                 await message.reply({ embeds: [embed] });
+
             } else {
                 // Show all available commands
-                const embed = this.createGeneralHelpEmbed(message);
+                const userCommands = [];
+                const modCommands = [];
+                const adminCommands = [];
+
+                for (const [name, command] of this.commands) {
+                    const commandInfo = `\`${command.name}\` - ${command.description}`;
+                    
+                    switch (command.permission) {
+                        case 'admin':
+                            adminCommands.push(commandInfo);
+                            break;
+                        case 'mod':
+                            modCommands.push(commandInfo);
+                            break;
+                        default:
+                            userCommands.push(commandInfo);
+                    }
+                }
+
+                const embed = new DiscordEmbedBuilder()
+                    .setTitle('📖 Available Commands')
+                    .setDescription(`Use \`${this.commandPrefix}help <command>\` for detailed information about a specific command.`)
+                    .setColor(0x0099FF)
+                    .setTimestamp();
+
+                if (userCommands.length > 0) {
+                    embed.addFields({ name: '👤 User Commands', value: userCommands.join('\n'), inline: false });
+                }
+
+                if (modCommands.length > 0 && this.hasPermission(message.member, 'mod')) {
+                    embed.addFields({ name: '🛡️ Moderator Commands', value: modCommands.join('\n'), inline: false });
+                }
+
+                if (adminCommands.length > 0 && this.hasPermission(message.member, 'admin')) {
+                    embed.addFields({ name: '👑 Admin Commands', value: adminCommands.join('\n'), inline: false });
+                }
+
                 await message.reply({ embeds: [embed] });
             }
 
-            return { success: true, command: commandName };
-
         } catch (error) {
-            logger.logError(error, 'Help command execution failed');
-            throw error;
+            logger.logError(error, 'Error handling help command');
+            await this.sendErrorMessage(message, 'Failed to show help information.');
         }
     }
 
     /**
-     * Handle ping command
+     * Handle stats command
+     * @param {Message} message - Discord message
+     * @param {Array} args - Command arguments
      */
-    async handlePingCommand(message, args) {
+    async handleStatsCommand(message, args) {
         try {
-            const startTime = Date.now();
-            const reply = await message.reply('🏓 Pinging...');
-            const endTime = Date.now();
+            const mainBridge = BridgeLocator.getInstance();
             
-            const latency = endTime - startTime;
-            const apiLatency = message.client.ws.ping;
+            // Get statistics from all managers
+            const discordStats = mainBridge.getDiscordManager?.()?.getStatistics() || {};
+            const minecraftStats = mainBridge.getMinecraftManager?.()?.getStatistics() || {};
 
-            const embed = this.embedBuilder.createInfoEmbed(
-                '🏓 Pong!',
-                `**Response Time:** ${latency}ms\n**API Latency:** ${apiLatency}ms`,
-                'success'
-            );
+            const embed = new DiscordEmbedBuilder()
+                .setTitle('📊 Bridge Statistics')
+                .setColor(0x0099FF)
+                .setTimestamp();
 
-            await reply.edit({ content: '', embeds: [embed] });
+            // Command stats
+            embed.addFields({
+                name: '🎯 Commands',
+                value: `Processed: ${this.stats.commandsProcessed}\nInvalid: ${this.stats.invalidCommands}\nUnauthorized: ${this.stats.unauthorizedAttempts}`,
+                inline: true
+            });
 
-            return { success: true, latency: latency, apiLatency: apiLatency };
+            // Discord stats
+            if (discordStats.messageSender) {
+                embed.addFields({
+                    name: '💬 Discord Messages',
+                    value: `Sent: ${discordStats.messageSender.messagesSent}\nEvents: ${discordStats.messageSender.eventsSent}\nErrors: ${discordStats.messageSender.errors}`,
+                    inline: true
+                });
+            }
+
+            // Minecraft stats
+            if (minecraftStats.totalMessages) {
+                embed.addFields({
+                    name: '🎮 Minecraft Messages',
+                    value: `Total: ${minecraftStats.totalMessages}\nGuild: ${minecraftStats.guildMessages || 0}\nEvents: ${minecraftStats.events || 0}`,
+                    inline: true
+                });
+            }
+
+            await message.reply({ embeds: [embed] });
 
         } catch (error) {
-            logger.logError(error, 'Ping command execution failed');
-            throw error;
+            logger.logError(error, 'Error handling stats command');
+            await this.sendErrorMessage(message, 'Failed to get statistics.');
         }
     }
 
-    // ==================== EMBED CREATION METHODS ====================
-
     /**
-     * Create status embed
+     * Handle reload command
+     * @param {Message} message - Discord message
+     * @param {Array} args - Command arguments
      */
-    createStatusEmbed(statusData) {
-        const embed = this.embedBuilder.createInfoEmbed('📊 System Status', '', 'system');
+    async handleReloadCommand(message, args) {
+        try {
+            await message.reply('⚠️ Configuration reload is not implemented yet. Please restart the bridge manually.');
 
-        // System status
-        if (statusData.system) {
-            embed.addFields({
-                name: '⚙️ System',
-                value: [
-                    `Status: ${statusData.system.running ? '✅ Running' : '❌ Stopped'}`,
-                    `Uptime: ${statusData.system.uptime}`,
-                    `Memory: ${statusData.system.memory.heapUsed}`,
-                    `Version: ${statusData.system.version || 'Unknown'}`
-                ].join('\n'),
-                inline: true
-            });
+        } catch (error) {
+            logger.logError(error, 'Error handling reload command');
+            await this.sendErrorMessage(message, 'Failed to reload configuration.');
         }
-
-        // Minecraft status
-        if (statusData.minecraft) {
-            embed.addFields({
-                name: '🎮 Minecraft',
-                value: [
-                    `Initialized: ${statusData.minecraft.initialized ? '✅ Yes' : '❌ No'}`,
-                    `Started: ${statusData.minecraft.started ? '✅ Yes' : '❌ No'}`,
-                    `Connections: ${statusData.minecraft.connections?.active || 0}/${statusData.minecraft.connections?.guilds?.length || 0}`
-                ].join('\n'),
-                inline: true
-            });
-        }
-
-        // Inter-guild status
-        if (statusData.interGuild) {
-            embed.addFields({
-                name: '🌉 Inter-Guild',
-                value: [
-                    `Enabled: ${statusData.interGuild.enabled ? '✅ Yes' : '❌ No'}`,
-                    `Queue: ${statusData.interGuild.stats?.queueSize || 0} messages`,
-                    `Processed: ${statusData.interGuild.stats?.messagesProcessed || 0}`
-                ].join('\n'),
-                inline: true
-            });
-        }
-
-        return embed;
     }
 
     /**
-     * Create stats embed
+     * Handle test command
+     * @param {Message} message - Discord message
+     * @param {Array} args - Command arguments
      */
-    createStatsEmbed(statsData, category) {
-        const title = category ? `📈 Statistics - ${category}` : '📈 System Statistics';
-        const embed = this.embedBuilder.createInfoEmbed(title, '', 'system');
+    async handleTestCommand(message, args) {
+        try {
+            const mainBridge = BridgeLocator.getInstance();
+            const discordManager = mainBridge.getDiscordManager?.();
 
-        // Add stats fields based on available data
-        for (const [key, value] of Object.entries(statsData)) {
-            if (typeof value === 'object' && value !== null) {
-                const fieldValue = Object.entries(value)
-                    .map(([k, v]) => `${k}: ${typeof v === 'object' ? JSON.stringify(v) : v}`)
-                    .join('\n');
-                
-                embed.addFields({
-                    name: key.charAt(0).toUpperCase() + key.slice(1),
-                    value: fieldValue.substring(0, 1024), // Discord field limit
-                    inline: true
-                });
+            if (!discordManager) {
+                await this.sendErrorMessage(message, 'Discord manager not available.');
+                return;
             }
-        }
 
-        return embed;
-    }
-
-    /**
-     * Create health embed
-     */
-    createHealthEmbed(healthData) {
-        const overallStatus = healthData.overall;
-        const color = overallStatus === 'healthy' ? 'success' : 
-                     overallStatus === 'warning' ? 'warning' : 'error';
-        
-        const emoji = overallStatus === 'healthy' ? '✅' : 
-                     overallStatus === 'warning' ? '⚠️' : '❌';
-
-        const embed = this.embedBuilder.createInfoEmbed(
-            `${emoji} System Health - ${overallStatus.toUpperCase()}`,
-            '',
-            color
-        );
-
-        // Component health
-        if (healthData.components) {
-            for (const [component, data] of Object.entries(healthData.components)) {
-                const statusEmoji = data.status === 'healthy' ? '✅' : 
-                                  data.status === 'warning' ? '⚠️' : '❌';
-                
-                const details = Object.entries(data)
-                    .filter(([k]) => k !== 'status')
-                    .map(([k, v]) => `${k}: ${v}`)
-                    .join('\n');
-
-                embed.addFields({
-                    name: `${statusEmoji} ${component}`,
-                    value: details || 'No additional info',
-                    inline: true
-                });
-            }
-        }
-
-        // Issues and warnings
-        if (healthData.issues && healthData.issues.length > 0) {
-            embed.addFields({
-                name: '❌ Issues',
-                value: healthData.issues.join('\n'),
-                inline: false
+            const testResult = await discordManager.testMessageSending({
+                username: message.author.displayName,
+                message: 'Test message from Discord command',
+                chatType: 'guild',
+                type: 'test'
             });
-        }
 
-        if (healthData.warnings && healthData.warnings.length > 0) {
-            embed.addFields({
-                name: '⚠️ Warnings',
-                value: healthData.warnings.join('\n'),
-                inline: false
-            });
-        }
-
-        return embed;
-    }
-
-    /**
-     * Create connections embed
-     */
-    createConnectionsEmbed(connectionData) {
-        const embed = this.embedBuilder.createInfoEmbed('🔗 Minecraft Connections', '', 'system');
-
-        if (connectionData.summary) {
-            embed.setDescription([
-                `**Total Guilds:** ${connectionData.summary.total}`,
-                `**Connected:** ${connectionData.summary.connected}`,
-                `**Success Rate:** ${((connectionData.summary.connected / connectionData.summary.total) * 100).toFixed(1)}%`
-            ].join('\n'));
-        }
-
-        // Connected guilds
-        if (connectionData.summary?.guilds && connectionData.summary.guilds.length > 0) {
-            const guildList = connectionData.summary.guilds
-                .map(guild => `✅ **${guild.guildName}** [${guild.guildTag}] (${guild.username})`)
-                .join('\n');
-
-            embed.addFields({
-                name: '✅ Connected Guilds',
-                value: guildList,
-                inline: false
-            });
-        }
-
-        return embed;
-    }
-
-    /**
-     * Create test result embed
-     */
-    createTestResultEmbed(testType, result) {
-        const success = result.success !== false;
-        const color = success ? 'success' : 'error';
-        const emoji = success ? '✅' : '❌';
-
-        const embed = this.embedBuilder.createInfoEmbed(
-            `${emoji} Test Results - ${testType}`,
-            result.message || 'Test completed',
-            color
-        );
-
-        if (result.details) {
-            for (const [key, value] of Object.entries(result.details)) {
-                embed.addFields({
-                    name: key,
-                    value: typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value),
-                    inline: true
-                });
-            }
-        }
-
-        return embed;
-    }
-
-    /**
-     * Create command help embed
-     */
-    createCommandHelpEmbed(commandName, command) {
-        return this.embedBuilder.createInfoEmbed(
-            `ℹ️ Command Help - ${commandName}`,
-            [
-                `**Description:** ${command.description}`,
-                `**Usage:** ${command.usage}`,
-                `**Permission:** ${command.permission}`
-            ].join('\n'),
-            'system'
-        );
-    }
-
-    /**
-     * Create general help embed
-     */
-    createGeneralHelpEmbed(message) {
-        const embed = this.embedBuilder.createInfoEmbed('ℹ️ Available Commands', '', 'system');
-
-        const userCommands = [];
-        const adminCommands = [];
-
-        for (const [name, command] of this.commands.entries()) {
-            const commandInfo = `**${this.prefix} ${name}** - ${command.description}`;
-            
-            if (command.permission === 'admin') {
-                adminCommands.push(commandInfo);
+            if (testResult.success) {
+                await message.reply('✅ Test message sent successfully!');
             } else {
-                userCommands.push(commandInfo);
+                await this.sendErrorMessage(message, `Test failed: ${testResult.error}`);
             }
+
+        } catch (error) {
+            logger.logError(error, 'Error handling test command');
+            await this.sendErrorMessage(message, 'Failed to send test message.');
         }
-
-        if (userCommands.length > 0) {
-            embed.addFields({
-                name: '👤 User Commands',
-                value: userCommands.join('\n'),
-                inline: false
-            });
-        }
-
-        if (adminCommands.length > 0 && this.hasPermission(message, 'admin')) {
-            embed.addFields({
-                name: '🛡️ Admin Commands',
-                value: adminCommands.join('\n'),
-                inline: false
-            });
-        }
-
-        embed.addFields({
-            name: 'Usage',
-            value: `Use \`${this.prefix} help <command>\` for detailed help on a specific command`,
-            inline: false
-        });
-
-        return embed;
-    }
-
-    // ==================== TEST METHODS ====================
-
-    async testBasicFunctionality() {
-        return {
-            success: true,
-            message: 'Basic functionality test passed',
-            details: {
-                timestamp: new Date().toISOString(),
-                commandHandler: 'operational',
-                embedBuilder: 'operational'
-            }
-        };
-    }
-
-    async testDiscordFunctionality() {
-        const mainBridge = BridgeLocator.getInstance();
-        const discordManager = mainBridge.getDiscordManager?.();
-
-        if (!discordManager) {
-            return {
-                success: false,
-                message: 'Discord manager not available'
-            };
-        }
-
-        const stats = discordManager.getStatistics();
-        
-        return {
-            success: stats.connected,
-            message: stats.connected ? 'Discord functionality test passed' : 'Discord not connected',
-            details: {
-                connected: stats.connected,
-                botInfo: discordManager.getBotInfo(),
-                statistics: stats
-            }
-        };
-    }
-
-    async testMinecraftConnections() {
-        const mainBridge = BridgeLocator.getInstance();
-        const minecraftManager = mainBridge.getMinecraftManager?.();
-
-        if (!minecraftManager) {
-            return {
-                success: false,
-                message: 'Minecraft manager not available'
-            };
-        }
-
-        const status = minecraftManager.getConnectionStatus();
-        const connectedGuilds = minecraftManager.getConnectedGuilds();
-
-        return {
-            success: connectedGuilds.length > 0,
-            message: `${connectedGuilds.length} Minecraft connections active`,
-            details: {
-                connectionStatus: status,
-                connectedGuilds: connectedGuilds
-            }
-        };
-    }
-
-    async testInterGuildSystem() {
-        const result = await this.adminCommands.executeCommand('interguild test');
-        
-        return {
-            success: result.success,
-            message: result.success ? 'Inter-guild test completed' : 'Inter-guild test failed',
-            details: result.result
-        };
     }
 
     // ==================== UTILITY METHODS ====================
 
     /**
-     * Check if user has permission for command
+     * Check if user has required permission
+     * @param {GuildMember} member - Discord guild member
+     * @param {string} requiredPermission - Required permission level
+     * @returns {boolean} Whether user has permission
      */
-    hasPermission(message, permission) {
-        if (permission === 'user') {
-            return true; // All users can use user commands
+    hasPermission(member, requiredPermission) {
+        if (!member) return false;
+
+        switch (requiredPermission) {
+            case 'user':
+                return true; // Everyone can use user commands
+
+            case 'mod':
+                // Check for moderator roles or admin permissions
+                return member.permissions.has(PermissionsBitField.Flags.ManageMessages) ||
+                       this.modRoles.some(roleId => member.roles.cache.has(roleId)) ||
+                       this.adminRoles.some(roleId => member.roles.cache.has(roleId));
+
+            case 'admin':
+                // Check for admin roles or admin permissions
+                return member.permissions.has(PermissionsBitField.Flags.Administrator) ||
+                       this.adminRoles.some(roleId => member.roles.cache.has(roleId));
+
+            default:
+                return false;
         }
-
-        if (permission === 'admin') {
-            // Check if user has administrator permission
-            return message.member && message.member.permissions.has('Administrator');
-        }
-
-        return false;
-    }
-
-    /**
-     * Check if user is on cooldown
-     */
-    isOnCooldown(userId) {
-        const lastUsed = this.cooldowns.get(userId);
-        if (!lastUsed) return false;
-        
-        return Date.now() - lastUsed < this.cooldownTime;
-    }
-
-    /**
-     * Update user cooldown
-     */
-    updateCooldown(userId) {
-        this.cooldowns.set(userId, Date.now());
     }
 
     /**
      * Send error message
+     * @param {Message} message - Original message
+     * @param {string} errorText - Error message text
      */
-    async sendErrorMessage(message, title, description) {
-        const embed = this.embedBuilder.createErrorEmbed(description, title);
-        await message.reply({ embeds: [embed] });
+    async sendErrorMessage(message, errorText) {
+        try {
+            const embed = new DiscordEmbedBuilder()
+                .setColor(0xFF0000)
+                .setTitle('❌ Error')
+                .setDescription(errorText)
+                .setTimestamp();
+
+            await message.reply({ embeds: [embed] });
+
+        } catch (error) {
+            logger.logError(error, 'Failed to send error message');
+            // Fallback to simple text message
+            try {
+                await message.reply(`❌ ${errorText}`);
+            } catch (fallbackError) {
+                logger.logError(fallbackError, 'Failed to send fallback error message');
+            }
+        }
     }
 
     /**
-     * Get command statistics
+     * Format uptime duration
+     * @param {number} seconds - Uptime in seconds
+     * @returns {string} Formatted uptime string
+     */
+    formatUptime(seconds) {
+        const days = Math.floor(seconds / 86400);
+        const hours = Math.floor((seconds % 86400) / 3600);
+        const minutes = Math.floor((seconds % 3600) / 60);
+
+        const parts = [];
+        if (days > 0) parts.push(`${days}d`);
+        if (hours > 0) parts.push(`${hours}h`);
+        if (minutes > 0) parts.push(`${minutes}m`);
+        
+        return parts.length > 0 ? parts.join(' ') : '< 1m';
+    }
+
+    /**
+     * Get statistics
+     * @returns {object} Handler statistics
      */
     getStatistics() {
         return {
             ...this.stats,
-            availableCommands: this.commands.size,
-            cooldownsActive: this.cooldowns.size
+            commandsRegistered: this.commands.size,
+            prefix: this.commandPrefix,
+            clientReady: !!this.client
         };
     }
 
     /**
-     * Clear expired cooldowns
+     * Update configuration
+     * @param {object} newConfig - New configuration
      */
-    cleanupCooldowns() {
-        const now = Date.now();
-        for (const [userId, lastUsed] of this.cooldowns.entries()) {
-            if (now - lastUsed > this.cooldownTime) {
-                this.cooldowns.delete(userId);
-            }
+    updateConfig(newConfig) {
+        if (newConfig.commandPrefix !== undefined) {
+            this.commandPrefix = newConfig.commandPrefix;
         }
+
+        if (newConfig.adminRoles) {
+            this.adminRoles = newConfig.adminRoles;
+        }
+
+        if (newConfig.modRoles) {
+            this.modRoles = newConfig.modRoles;
+        }
+
+        logger.debug('CommandHandler configuration updated');
+    }
+
+    /**
+     * Cleanup resources
+     */
+    cleanup() {
+        this.client = null;
+        
+        // Remove all listeners
+        this.removeAllListeners();
+
+        logger.debug('CommandHandler cleaned up');
     }
 }
 

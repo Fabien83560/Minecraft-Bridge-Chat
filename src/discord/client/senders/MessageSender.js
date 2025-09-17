@@ -1,3 +1,6 @@
+// Globals Imports
+const { EmbedBuilder: DiscordEmbedBuilder } = require('discord.js');
+
 // Specific Imports
 const BridgeLocator = require("../../../bridgeLocator.js");
 const MessageFormatter = require("../../../shared/MessageFormatter.js");
@@ -35,10 +38,15 @@ class MessageSender {
             errors: 0
         };
 
-        this.initialize();
+        // Initialize only the components that don't require Discord client
+        this.initializeComponents();
     }
 
-    initialize() {
+    /**
+     * Initialize components that don't require Discord client
+     * This is called in constructor
+     */
+    initializeComponents() {
         try {
             // Initialize message formatter for Discord
             const formatterConfig = {
@@ -60,15 +68,24 @@ class MessageSender {
             // Initialize embed builder
             this.embedBuilder = new EmbedBuilder();
 
-            logger.discord('MessageSender initialized');
+            logger.discord('MessageSender components initialized');
 
         } catch (error) {
-            logger.logError(error, 'Failed to initialize MessageSender');
+            logger.logError(error, 'Failed to initialize MessageSender components');
             throw error;
         }
     }
 
+    /**
+     * Initialize with Discord client
+     * This is called after Discord client is ready
+     * @param {Client} client - Discord client instance
+     */
     async initialize(client) {
+        if (!client) {
+            throw new Error('Discord client is required for MessageSender initialization');
+        }
+
         this.client = client;
 
         try {
@@ -89,23 +106,45 @@ class MessageSender {
     }
 
     async validateAndCacheChannels() {
+        if (!this.client) {
+            throw new Error('Discord client not available for channel validation');
+        }
+
         const bridgeConfig = this.config.get('bridge.channels');
 
-        // Validate chat channel
-        const chatChannel = await this.client.channels.fetch(bridgeConfig.chat.id);
-        if (!chatChannel) {
-            throw new Error(`Chat channel not found: ${bridgeConfig.chat.id}`);
+        if (!bridgeConfig) {
+            throw new Error('Bridge channels configuration not found');
         }
-        this.channels.chat = chatChannel;
 
-        // Validate staff channel
-        const staffChannel = await this.client.channels.fetch(bridgeConfig.staff.id);
-        if (!staffChannel) {
-            throw new Error(`Staff channel not found: ${bridgeConfig.staff.id}`);
+        try {
+            // Validate chat channel
+            if (!bridgeConfig.chat || !bridgeConfig.chat.id) {
+                throw new Error('Chat channel ID not configured');
+            }
+
+            const chatChannel = await this.client.channels.fetch(bridgeConfig.chat.id);
+            if (!chatChannel) {
+                throw new Error(`Chat channel not found: ${bridgeConfig.chat.id}`);
+            }
+            this.channels.chat = chatChannel;
+
+            // Validate staff channel
+            if (!bridgeConfig.staff || !bridgeConfig.staff.id) {
+                throw new Error('Staff channel ID not configured');
+            }
+
+            const staffChannel = await this.client.channels.fetch(bridgeConfig.staff.id);
+            if (!staffChannel) {
+                throw new Error(`Staff channel not found: ${bridgeConfig.staff.id}`);
+            }
+            this.channels.staff = staffChannel;
+
+            logger.discord(`Validated Discord channels - Chat: ${chatChannel.name}, Staff: ${staffChannel.name}`);
+
+        } catch (error) {
+            logger.logError(error, 'Failed to validate Discord channels');
+            throw error;
         }
-        this.channels.staff = staffChannel;
-
-        logger.discord(`Validated Discord channels - Chat: ${chatChannel.name}, Staff: ${staffChannel.name}`);
     }
 
     // ==================== MAIN SENDING METHODS ====================
@@ -114,107 +153,111 @@ class MessageSender {
      * Send guild chat message to Discord
      * @param {object} messageData - Parsed guild message data
      * @param {object} guildConfig - Guild configuration
-     * @param {string} channelType - Channel type (chat/staff)
      * @returns {Promise} Send promise
      */
-    async sendGuildMessage(messageData, guildConfig, channelType = 'chat') {
+    async sendGuildMessage(messageData, guildConfig) {
+        if (!this.client) {
+            throw new Error('Discord client not initialized');
+        }
+
         try {
-            // Check rate limiting
+            // Determine target channel based on chat type
+            const channelType = messageData.chatType === 'officer' ? 'staff' : 'chat';
             const channel = this.channels[channelType];
+
             if (!channel) {
-                throw new Error(`Channel not found: ${channelType}`);
+                throw new Error(`Discord ${channelType} channel not available`);
             }
 
+            // Check rate limiting
             if (this.isRateLimited(channel.id)) {
                 this.stats.rateLimitHits++;
-                logger.debug(`[DISCORD] Message rate limited for ${channelType} channel`);
+                logger.warn(`Rate limit hit for Discord channel ${channel.name}`);
                 return null;
             }
 
-            // Format message using templates
-            const formattedMessage = this.messageFormatter.formatGuildMessage(
-                messageData,
-                guildConfig,
-                guildConfig, // For Discord, source and target are same
-                'messagesToDiscord'
-            );
-
+            // Get formatted message
+            const formattedMessage = this.messageFormatter.formatGuildMessage(messageData, guildConfig, guildConfig, 'messagesToDiscord');
             if (!formattedMessage) {
-                logger.warn(`[DISCORD] No formatted message generated for ${guildConfig.name}`);
+                logger.warn(`No formatted message generated for Discord`);
                 return null;
             }
 
-            // Determine sending method (webhook vs normal)
             let result;
-            if (this.shouldUseWebhook(messageData, guildConfig)) {
-                result = await this.sendViaWebhook(formattedMessage, messageData, guildConfig, channelType);
+
+            // Use webhook if available and preferred
+            if (this.webhookSender && this.webhookSender.hasWebhook(channelType) && 
+                this.config.get('bridge.webhook.useForGuildMessages') !== false) {
+                
+                result = await this.sendViaWebhook(messageData, guildConfig, channelType);
                 this.stats.webhooksSent++;
             } else {
+                // Send via regular channel
                 result = await this.sendViaChannel(formattedMessage, channel);
+                this.stats.messagesSent++;
             }
 
-            // Update rate limiting and stats
+            // Update rate limiting
             this.updateRateLimit(channel.id);
-            this.stats.messagesSent++;
 
-            logger.bridge(`[DISCORD] Sent ${messageData.chatType || 'guild'} message to ${channelType} channel: "${formattedMessage.substring(0, 100)}${formattedMessage.length > 100 ? '...' : ''}"`);
+            logger.discord(`[DISCORD] Sent guild message to ${channelType} channel: "${formattedMessage}"`);
 
             return result;
 
         } catch (error) {
             this.stats.errors++;
-            logger.logError(error, `Failed to send guild message to Discord ${channelType} channel`);
+            logger.logError(error, 'Failed to send guild message to Discord');
             throw error;
         }
     }
 
     /**
-     * Send guild event to Discord
+     * Send event to Discord
      * @param {object} eventData - Parsed event data
      * @param {object} guildConfig - Guild configuration
-     * @param {string} channelType - Channel type (chat/staff)
      * @returns {Promise} Send promise
      */
-    async sendGuildEvent(eventData, guildConfig, channelType = 'chat') {
+    async sendEvent(eventData, guildConfig) {
+        if (!this.client) {
+            throw new Error('Discord client not initialized');
+        }
+
         try {
-            const channel = this.channels[channelType];
+            const channel = this.channels.chat; // Events go to chat channel
+
             if (!channel) {
-                throw new Error(`Channel not found: ${channelType}`);
+                throw new Error('Discord chat channel not available');
             }
 
+            // Check rate limiting
             if (this.isRateLimited(channel.id)) {
                 this.stats.rateLimitHits++;
-                logger.debug(`[DISCORD] Event rate limited for ${channelType} channel`);
+                logger.warn(`Rate limit hit for Discord channel ${channel.name}`);
                 return null;
             }
 
-            // Format event using templates
-            const formattedMessage = this.messageFormatter.formatGuildEvent(
-                eventData,
-                guildConfig,
-                guildConfig,
-                'messagesToDiscord'
-            );
+            // Get formatted message
+            const formattedMessage = this.messageFormatter.formatGuildEvent(eventData, guildConfig, guildConfig, 'messagesToDiscord');
 
             if (!formattedMessage) {
-                logger.warn(`[DISCORD] No formatted event generated for ${guildConfig.name} - ${eventData.type}`);
+                logger.warn(`No formatted event message generated for Discord`);
                 return null;
             }
 
-            // Send via channel (events typically don't use webhooks)
+            // Send the message
             const result = await this.sendViaChannel(formattedMessage, channel);
 
-            // Update rate limiting and stats
+            // Update rate limiting and statistics
             this.updateRateLimit(channel.id);
             this.stats.eventsSent++;
 
-            logger.bridge(`[DISCORD] Sent ${eventData.type} event to ${channelType} channel: "${formattedMessage}"`);
+            logger.discord(`[DISCORD] Sent event to chat channel: "${formattedMessage}"`);
 
             return result;
 
         } catch (error) {
             this.stats.errors++;
-            logger.logError(error, `Failed to send guild event to Discord ${channelType} channel`);
+            logger.logError(error, 'Failed to send event to Discord');
             throw error;
         }
     }
@@ -222,25 +265,31 @@ class MessageSender {
     /**
      * Send system message to Discord
      * @param {string} type - System message type
-     * @param {object} data - System message data
-     * @param {object} guildConfig - Guild configuration
-     * @param {string} channelType - Channel type (chat/staff)
+     * @param {object} data - Message data
+     * @param {string} channelType - Target channel type ('chat' or 'staff')
      * @returns {Promise} Send promise
      */
-    async sendSystemMessage(type, data, guildConfig, channelType = 'chat') {
+    async sendSystemMessage(type, data, channelType = 'chat') {
+        if (!this.client) {
+            throw new Error('Discord client not initialized');
+        }
+
         try {
             const channel = this.channels[channelType];
+
             if (!channel) {
-                throw new Error(`Channel not found: ${channelType}`);
+                throw new Error(`Discord ${channelType} channel not available`);
             }
 
-            // Format system message using templates
-            const formattedMessage = this.messageFormatter.formatSystemMessage(
-                type,
-                data,
-                guildConfig,
-                'messagesToDiscord'
-            );
+            // Check rate limiting
+            if (this.isRateLimited(channel.id)) {
+                this.stats.rateLimitHits++;
+                logger.warn(`Rate limit hit for Discord channel ${channel.name}`);
+                return null;
+            }
+
+            // Get formatted system message
+            const formattedMessage = this.messageFormatter.formatSystem(type, data, 'discord');
 
             if (!formattedMessage) {
                 logger.warn(`[DISCORD] No formatted system message generated for ${type}`);
@@ -252,7 +301,7 @@ class MessageSender {
 
             this.stats.systemMessagesSent++;
 
-            logger.bridge(`[DISCORD] Sent system message to ${channelType} channel: "${formattedMessage}"`);
+            logger.discord(`[DISCORD] Sent system message to ${channelType} channel: "${formattedMessage}"`);
 
             return result;
 
@@ -271,8 +320,16 @@ class MessageSender {
      * @returns {Promise} Send promise
      */
     async sendConnectionStatus(status, guildConfig, details = {}) {
+        if (!this.client) {
+            throw new Error('Discord client not initialized');
+        }
+
         try {
             const channel = this.channels.chat; // Connection status goes to chat channel
+
+            if (!channel) {
+                throw new Error('Discord chat channel not available');
+            }
 
             let message;
             let embed = null;
@@ -285,149 +342,87 @@ class MessageSender {
                     
                 case 'disconnected':
                     const reason = details.reason ? ` (${details.reason})` : '';
-                    message = `🔴 **${guildConfig.name}** bot disconnected${reason}`;
+                    message = `❌ **${guildConfig.name}** bot disconnected from Hypixel${reason}`;
                     embed = this.embedBuilder.createConnectionEmbed(guildConfig, status, details);
                     break;
                     
-                case 'reconnected':
-                    message = `🔄 **${guildConfig.name}** bot reconnected`;
+                case 'reconnecting':
+                    message = `🔄 **${guildConfig.name}** bot reconnecting to Hypixel...`;
+                    break;
+                    
+                case 'error':
+                    const errorMsg = details.error ? ` - ${details.error}` : '';
+                    message = `⚠️ **${guildConfig.name}** connection error${errorMsg}`;
                     embed = this.embedBuilder.createConnectionEmbed(guildConfig, status, details);
                     break;
                     
                 default:
-                    message = `🔧 **${guildConfig.name}** status: ${status}`;
-                    break;
+                    message = `ℹ️ **${guildConfig.name}** status: ${status}`;
             }
 
-            // Send with or without embed
-            let result;
-            if (embed) {
-                result = await channel.send({ content: message, embeds: [embed] });
-                this.stats.embedsSent++;
-            } else {
-                result = await channel.send(message);
-            }
+            // Send the message
+            const result = await this.sendViaChannel(message, channel, embed);
 
-            logger.bridge(`[DISCORD] Sent connection status for ${guildConfig.name}: ${status}`);
+            logger.discord(`[DISCORD] Sent connection status to chat channel: "${message}"`);
 
             return result;
 
         } catch (error) {
             this.stats.errors++;
-            logger.logError(error, `Failed to send connection status to Discord`);
+            logger.logError(error, 'Failed to send connection status to Discord');
             throw error;
         }
     }
 
-    // ==================== SENDING IMPLEMENTATION METHODS ====================
+    // ==================== INTERNAL SENDING METHODS ====================
 
     /**
      * Send message via webhook
-     * @param {string} message - Formatted message
-     * @param {object} messageData - Original message data
+     * @param {object} messageData - Message data
      * @param {object} guildConfig - Guild configuration
      * @param {string} channelType - Channel type
      * @returns {Promise} Send promise
      */
-    async sendViaWebhook(message, messageData, guildConfig, channelType) {
+    async sendViaWebhook(messageData, guildConfig, channelType) {
         if (!this.webhookSender) {
-            throw new Error('Webhook sender not initialized');
+            throw new Error('Webhook sender not available');
         }
 
-        return await this.webhookSender.sendMessage(message, messageData, guildConfig, channelType);
+        const webhook = this.webhookSender.getWebhook(channelType);
+        if (!webhook) {
+            throw new Error(`Webhook not available for ${channelType} channel`);
+        }
+
+        // Format message content
+        const content = this.messageFormatter.formatGuildMessage(messageData, guildConfig, guildConfig, 'messagesToDiscord');
+
+        // Send via webhook
+        return await this.webhookSender.sendMessage(
+            content,
+            messageData,
+            guildConfig,
+            channelType
+        );
     }
 
     /**
-     * Send message via regular channel
-     * @param {string} message - Formatted message
-     * @param {object} channel - Discord channel
+     * Send message via channel
+     * @param {string} content - Message content
+     * @param {Channel} channel - Discord channel
+     * @param {object} embed - Optional embed
      * @returns {Promise} Send promise
      */
-    async sendViaChannel(message, channel) {
-        // Split message if too long for Discord
-        if (message.length > 2000) {
-            const chunks = this.splitMessage(message, 2000);
-            const results = [];
-            
-            for (const chunk of chunks) {
-                const result = await channel.send(chunk);
-                results.push(result);
-            }
-            
-            return results;
+    async sendViaChannel(content, channel, embed = null) {
+        const options = { content };
+
+        if (embed) {
+            options.embeds = [embed];
         }
 
-        return await channel.send(message);
-    }
-
-    /**
-     * Split long message into chunks
-     * @param {string} message - Message to split
-     * @param {number} maxLength - Maximum chunk length
-     * @returns {Array} Message chunks
-     */
-    splitMessage(message, maxLength = 2000) {
-        if (message.length <= maxLength) {
-            return [message];
-        }
-
-        const chunks = [];
-        let currentChunk = '';
-
-        const lines = message.split('\n');
-        
-        for (const line of lines) {
-            if ((currentChunk + line + '\n').length > maxLength) {
-                if (currentChunk) {
-                    chunks.push(currentChunk.trim());
-                    currentChunk = '';
-                }
-                
-                // If single line is too long, split by words
-                if (line.length > maxLength) {
-                    const words = line.split(' ');
-                    for (const word of words) {
-                        if ((currentChunk + word + ' ').length > maxLength) {
-                            if (currentChunk) {
-                                chunks.push(currentChunk.trim());
-                                currentChunk = '';
-                            }
-                        }
-                        currentChunk += word + ' ';
-                    }
-                } else {
-                    currentChunk = line + '\n';
-                }
-            } else {
-                currentChunk += line + '\n';
-            }
-        }
-
-        if (currentChunk.trim()) {
-            chunks.push(currentChunk.trim());
-        }
-
-        return chunks;
+        return await channel.send(options);
     }
 
     // ==================== UTILITY METHODS ====================
-
-    /**
-     * Check if should use webhook for message
-     * @param {object} messageData - Message data
-     * @param {object} guildConfig - Guild configuration
-     * @returns {boolean} Whether to use webhook
-     */
-    shouldUseWebhook(messageData, guildConfig) {
-        const webhookConfig = this.config.get('bridge.webhook');
-        
-        if (!webhookConfig || !webhookConfig.enabled || !this.webhookSender) {
-            return false;
-        }
-
-        // Use webhook for guild chat messages (not officer or events)
-        return messageData.chatType === 'guild' || (!messageData.chatType && messageData.type === 'guild_chat');
-    }
 
     /**
      * Check if channel is rate limited
@@ -496,7 +491,8 @@ class MessageSender {
                     name: this.channels.staff.name
                 } : null
             },
-            webhookEnabled: !!this.webhookSender
+            webhookEnabled: !!this.webhookSender,
+            clientReady: !!this.client
         };
     }
 
@@ -535,6 +531,9 @@ class MessageSender {
         if (this.webhookSender) {
             this.webhookSender.cleanup();
         }
+
+        this.client = null;
+        this.channels = { chat: null, staff: null };
 
         logger.debug('Discord MessageSender cleaned up');
     }

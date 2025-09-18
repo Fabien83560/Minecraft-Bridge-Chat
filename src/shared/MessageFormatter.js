@@ -431,7 +431,7 @@ class MessageFormatter {
         const tag = this.config.showTags ? ` [${sourceGuildConfig.tag}]` : '';
         
         switch (eventData.type) {
-            case 'join':
+            case 'welcome':
                 return `${prefix}${eventData.username}${tag} joined the guild!`;
             case 'leave':
                 return `${prefix}${eventData.username}${tag} left the guild`;

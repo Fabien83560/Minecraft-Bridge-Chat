@@ -7,3 +7,6 @@ config/settings.json
 
 # Data of the bot
 data
+
+# Personnal todolist
+todo.txt

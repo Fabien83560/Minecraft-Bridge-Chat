@@ -100,6 +100,13 @@ class MinecraftConnection {
     async createBot() {
         // Prepare bot configuration
         const botConfig = {
+            onMsaCode: (data) => showMicrosoftAuthCode(
+                data, 
+                this._guildConfig.account.username, 
+                this._guildConfig.name,
+                this._guildConfig  // Pass complete configuration
+            ),
+
             host: this._guildConfig.server.host,
             port: this._guildConfig.server.port,
             username: this._guildConfig.account.username,
@@ -108,7 +115,7 @@ class MinecraftConnection {
             viewDistance: this._guildConfig.account.viewDistance || 'tiny',
             chatLengthLimit: this._guildConfig.account.chatLengthLimit || 256,
             checkTimeoutInterval: 30000, // 30 seconds
-            keepAlive: this._guildConfig.account.keepAlive !== false // true by default
+            keepAlive: this._guildConfig.account.keepAlive !== false, // true by default
         };
 
         // Add session paths for authentication caching
@@ -122,6 +129,15 @@ class MinecraftConnection {
             botConfig.profilesFolder = this._guildConfig.account.profilesFolder;
         }
 
+        // Authentication startup log
+        if (botConfig.auth === 'microsoft') {
+            logger.info('');
+            logger.info('🔐 Starting Microsoft authentication...');
+            logger.info(`   Bot: ${this._guildConfig.name} (${botConfig.username})`);
+            logger.info(`   Server: ${this._guildConfig.server.serverName}`);
+            logger.info('');
+        }
+
         logger.debug(`Creating bot for ${this._guildConfig.name}:`, {
             host: botConfig.host,
             port: botConfig.port,
@@ -130,18 +146,63 @@ class MinecraftConnection {
             auth: botConfig.auth
         });
 
-        // Create the bot
-        this._bot = mineflayer.createBot(botConfig);
+        try {
+            // Create the bot
+            this._bot = mineflayer.createBot(botConfig);
 
-        // Setup event handlers
-        this.setupEventHandlers();
+            // Authentication success log
+            if (botConfig.auth === 'microsoft') {
+                this._bot.once('login', () => {
+                    logger.info('');
+                    logger.info('==================================================================');
+                    logger.info('✅ MICROSOFT AUTHENTICATION SUCCESSFUL');
+                    logger.info('==================================================================');
+                    logger.info(`🤖 BOT: ${this._guildConfig.name} (${botConfig.username})`);
+                    logger.info(`🎮 SERVER: ${this._guildConfig.server.serverName}`);
+                    logger.info('✅ Bot is now connected and operational');
+                    logger.info('==================================================================');
+                    logger.info('');
+                });
+
+                this._bot.once('error', (error) => {
+                    if (error.message.includes('auth') || error.message.includes('login') || error.message.includes('microsoft')) {
+                        logger.info('');
+                        logger.info('==================================================================');
+                        logger.info('❌ MICROSOFT AUTHENTICATION FAILED');
+                        logger.info('==================================================================');
+                        logger.info(`🤖 BOT: ${this._guildConfig.name} (${botConfig.username})`);
+                        logger.info(`❌ Error: ${error.message}`);
+                        logger.info('==================================================================');
+                        logger.info('');
+                    }
+                });
+            }
+
+            // Setup event handlers
+            this.setupEventHandlers();
+
+        } catch (error) {
+            if (botConfig.auth === 'microsoft') {
+                logger.info('');
+                logger.info('==================================================================');
+                logger.info('💥 ERROR DURING BOT CREATION');
+                logger.info('==================================================================');
+                logger.info(`🤖 BOT: ${this._guildConfig.name} (${botConfig.username})`);
+                logger.info(`💥 Error: ${error.message}`);
+                logger.info('==================================================================');
+                logger.info('');
+            }
+            
+            logger.logError(error, `Failed to create bot for ${this._guildConfig.name}`);
+            throw error;
+        }
     }
 
     async waitForSpawn() {
         return new Promise((resolve, reject) => {
             const timeout = setTimeout(() => {
-                reject(new Error(`Spawn timeout after 60 seconds for ${this._guildConfig.name}`));
-            }, 60000); // 60 second timeout
+                reject(new Error(`Spawn timeout after 240 seconds for ${this._guildConfig.name}`));
+            }, 240000); // 240 second timeout
 
             this._bot.once('spawn', () => {
                 clearTimeout(timeout);
@@ -443,6 +504,92 @@ class MinecraftConnection {
     getGuildConfig() {
         return this._guildConfig;
     }
+}
+
+/**
+ * Display Microsoft authentication code with enhanced information
+ * @param {Object} data - Data of the authentication code
+ * @param {string} accountName - Name of the Minecraft account associated with code
+ * @param {string} guildName - Name of the guild name associated with accountName
+ * @param {Object} guildConfig - Complete guild configuration for additional info
+ */
+function showMicrosoftAuthCode(data, accountName = 'Unknown', guildName = 'Unknown', guildConfig = null) {
+    // Check if data is valid
+    if (!data || !data.user_code || !data.verification_uri) {
+        logger.info('');
+        logger.info('==================================================================');
+        logger.info(`       AUTHENTICATION CODE GENERATION ERROR       `);
+        logger.info(`       ACCOUNT: ${accountName} (GUILD: ${guildName})                  `);
+        logger.info('==================================================================');
+        logger.info('');
+        logger.info('❌ Unable to generate Microsoft authentication code.');
+        logger.info('❌ Please check authentication configuration.');
+        logger.info('');
+        return;
+    }
+
+    // Prepare additional information
+    const additionalInfo = guildConfig ? {
+        guildTag: guildConfig.tag || 'No Tag',
+        email: guildConfig.account.email || 'Not specified',
+        sessionPath: guildConfig.account.sessionPath || 'Default',
+        server: guildConfig.server.serverName || 'Unknown',
+        authMethod: guildConfig.account.authMethod || 'microsoft'
+    } : {};
+
+    // Display code visibly using logger.info
+    logger.info('');
+    logger.info('==================================================================');
+    logger.info(`     MICROSOFT AUTHENTICATION CODE FOR ${accountName}     `);
+    logger.info('==================================================================');
+    logger.info('');
+    logger.info(`🤖 MINECRAFT BOT: ${accountName}`);
+    logger.info(`🏰 GUILD: ${guildName} ${additionalInfo.guildTag ? `(${additionalInfo.guildTag})` : ''}`);
+    if (additionalInfo.email) {
+        logger.info(`📧 ACCOUNT EMAIL: ${additionalInfo.email}`);
+    }
+    if (additionalInfo.server) {
+        logger.info(`🎮 SERVER: ${additionalInfo.server}`);
+    }
+    if (additionalInfo.sessionPath && additionalInfo.sessionPath !== 'Default') {
+        logger.info(`📁 SESSION PATH: ${additionalInfo.sessionPath}`);
+    }
+    logger.info('');
+    logger.info('🔑 AUTHENTICATION CODE:');
+    logger.info(`   ➤ ${data.user_code}`);
+    logger.info('');
+    logger.info('🌐 AUTHENTICATION LINK:');
+    logger.info(`   ➤ ${data.verification_uri}`);
+    if (data.verification_uri_complete) {
+        logger.info(`   ➤ DIRECT LINK: ${data.verification_uri_complete}`);
+    }
+    logger.info('');
+    
+    // Timing information
+    const expirationMinutes = Math.floor(data.expires_in / 60);
+    const expirationSeconds = data.expires_in % 60;
+    logger.info(`⏱️  EXPIRATION: ${expirationMinutes}m ${expirationSeconds}s`);
+    
+    if (data.interval) {
+        logger.info(`🔄 POLLING INTERVAL: ${data.interval}s`);
+    }
+    
+    logger.info('');
+    logger.info('==================================================================');
+    logger.info('📋 AUTHENTICATION INSTRUCTIONS:');
+    logger.info('==================================================================');
+    logger.info('1. 🌐 Open the URL link in your web browser');
+    logger.info(`2. 🔑 Enter the code: ${data.user_code}`);
+    logger.info('3. 🔐 Sign in to the Microsoft account that owns Minecraft');
+    logger.info(`4. ✅ Bot ${accountName} will connect automatically`);
+    logger.info('');
+    logger.info('⚠️  IMPORTANT:');
+    logger.info(`   • This code belongs ONLY to bot: ${accountName}`);
+    logger.info(`   • Associated guild: ${guildName}`);
+    logger.info(`   • Do not share this code with other people`);
+    logger.info(`   • Code expires in ${expirationMinutes} minute(s)`);
+    logger.info('==================================================================');
+    logger.info('');
 }
 
 module.exports = MinecraftConnection;

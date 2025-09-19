@@ -181,7 +181,31 @@ class DiscordBot extends EventEmitter {
     }
 
     /**
-     * Initialize handlers with Discord client
+     * Setup message handler event forwarding
+     */
+    setupMessageHandlerEvents() {
+        if (!this.messageHandler) {
+            logger.warn('MessageHandler not available for event setup');
+            return;
+        }
+
+        // Forward message events from MessageHandler
+        this.messageHandler.on('message', (messageData) => {
+            logger.debug(`[DISCORD-BOT] Message event from MessageHandler: ${JSON.stringify(messageData)}`);
+            this.emit('message', messageData);
+        });
+
+        // Forward command events from MessageHandler  
+        this.messageHandler.on('command', (commandData) => {
+            logger.debug(`[DISCORD-BOT] Command event from MessageHandler: ${JSON.stringify(commandData)}`);
+            this.emit('command', commandData);
+        });
+
+        logger.debug('DiscordBot message handler events setup completed');
+    }
+
+    /**
+     * Update initializeHandlers method
      */
     async initializeHandlers() {
         try {
@@ -190,21 +214,18 @@ class DiscordBot extends EventEmitter {
                 await this.messageHandler.initialize(this.client);
                 
                 // Set up message handler event forwarding
-                this.messageHandler.on('message', (data) => {
-                    this.emit('message', data);
-                });
+                this.setupMessageHandlerEvents();
                 
-                this.messageHandler.on('command', (data) => {
-                    this.emit('command', data);
-                });
+                logger.debug('Message handler initialized and events setup');
             }
 
             // Initialize command handler
             if (this.commandHandler) {
                 await this.commandHandler.initialize(this.client);
+                logger.debug('Command handler initialized');
             }
 
-            logger.discord('Discord bot handlers initialized');
+            logger.debug('All Discord bot handlers initialized');
 
         } catch (error) {
             logger.logError(error, 'Failed to initialize Discord bot handlers');

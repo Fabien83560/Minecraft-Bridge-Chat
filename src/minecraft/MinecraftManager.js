@@ -3,7 +3,7 @@ const fs = require('fs');
 
 // Specific Imports
 const BridgeCoordinator = require('../discord/bridge/BridgeCoordinator.js');
-const BotManager = require("./client/botManager.js")
+const BotManager = require("./client/BotManager.js")
 const BridgeLocator = require("../bridgeLocator.js");
 const logger = require('../shared/logger/index.js');
 

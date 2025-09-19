@@ -3,8 +3,8 @@ const EventEmitter = require('events');
 
 // Specific Imports
 const BridgeLocator = require("../../bridgeLocator.js");
-const Connection = require("./connection.js");
-const MessageCoordinator = require("./parsers/MessageCoordinator.js");
+const MinecraftConnection = require("./connection.js");
+const MessageCoordinator = require("../client/parsers/MessageCoordinator.js");
 const InterGuildManager = require("../../shared/InterGuildManager.js");
 const logger = require("../../shared/logger");
 
@@ -20,151 +20,118 @@ class BotManager extends EventEmitter {
         this.messageCoordinator = new MessageCoordinator();
         this.interGuildManager = new InterGuildManager();
 
-        // Load all guild configurations
-        this.guilds = this.config.get('guilds');
-
-        logger.debug('BotManager initialized');
+        this.initialize();
     }
 
-    // ==================== LIFECYCLE METHODS ====================
+    async initialize() {
+        const enabledGuilds = this.config.getEnabledGuilds();
 
-    /**
-     * Start all bot connections
-     */
-    async startAll() {
-        try {
-            logger.minecraft('Starting all bot connections...');
-
-            // Filter enabled guilds
-            const enabledGuilds = this.guilds.filter(guild => guild.enabled);
+        enabledGuilds.forEach(guild => {
+            const connection = new MinecraftConnection(guild);
             
-            if (enabledGuilds.length === 0) {
-                logger.warn('No enabled guilds found');
-                return;
+            // Set up callbacks for guild messages
+            connection.setMessageCallback((rawMessage, guildMessageData) => {
+                this.handleGuildMessage(guild.id, rawMessage, guildMessageData);
+            });
+            
+            this.connections.set(guild.id, connection);
+
+            logger.info(`Connection initialized for ${guild.name}`);
+        });
+    }
+
+    async startAll() {
+        const connectionPromises = [];
+
+        for(const [guildId, connection] of this.connections) {
+            const promise = this.startConnection(guildId);
+            connectionPromises.push(promise);
+        }
+
+        const results = await Promise.allSettled(connectionPromises);
+
+        let successCount = 0;
+        let failCount = 0;
+
+        results.forEach((result, index) => {
+            const guildId = Array.from(this.connections.keys())[index];
+            const guildName = this.connections.get(guildId).getGuildConfig().name;
+
+            if (result.status === "fulfilled") {
+                successCount++;
+                logger.minecraft(`✅ Connection started for ${guildName}`);
+            } else {
+                failCount++;
+                logger.logError(result.reason, `Failed to start connection for ${guildName}`);
             }
+        });
 
-            logger.minecraft(`Found ${enabledGuilds.length} enabled guild(s)`);
+        logger.minecraft(`✅ Connection summary: ${successCount} successful, ${failCount} failed`);
+        
+        if (successCount === 0) {
+            throw new Error('Failed to start any Minecraft connections');
+        }
+    }
 
-            // Start connections for all enabled guilds
-            const startPromises = enabledGuilds.map(guild => this.startConnection(guild));
-            await Promise.allSettled(startPromises);
+    async startConnection(guildId) {
+        const connection = this.connections.get(guildId);
+        if (!connection) {
+            throw new Error(`No connection found for guild: ${guildId}`);
+        }
 
-            logger.minecraft('✅ All bot connections started');
-
+        try {
+            await connection.connect();
+            this.setupConnectionMonitoring(guildId);
+            
+            // Emit connection event
+            this.emit('connection', {
+                type: 'connected',
+                guildId: guildId,
+                guildName: connection.getGuildConfig().name,
+                username: connection.getGuildConfig().account.username
+            });
+        
         } catch (error) {
-            logger.logError(error, 'Failed to start all bot connections');
+            logger.logError(error, `Failed to start connection for guild: ${guildId}`);
+            
+            // Schedule reconnection if enabled
+            this.scheduleReconnection(guildId);
             throw error;
         }
     }
 
-    /**
-     * Stop all bot connections
-     */
-    async stopAll() {
-        try {
-            logger.minecraft('Stopping all bot connections...');
+    setupConnectionMonitoring(guildId) {
+        const connection = this.connections.get(guildId);
+        if (!connection)
+            return;
 
-            // Clear all reconnect timers
-            for (const timer of this.reconnectTimers.values()) {
-                clearTimeout(timer);
-            }
-            this.reconnectTimers.clear();
+        const bot = connection.getBot();
+        if (!bot)
+            return;
 
-            // Stop all connections
-            const stopPromises = Array.from(this.connections.values()).map(connection =>
-                connection.disconnect(true)
-            );
-
-            await Promise.allSettled(stopPromises);
-            this.connections.clear();
-
-            logger.minecraft('✅ All bot connections stopped');
-
-        } catch (error) {
-            logger.logError(error, 'Error stopping bot connections');
-        }
-    }
-
-    /**
-     * Start connection for a specific guild
-     * @param {object} guildConfig - Guild configuration
-     */
-    async startConnection(guildConfig) {
-        try {
-            logger.minecraft(`Starting connection for guild: ${guildConfig.name} (${guildConfig.account.username})`);
-
-            const connection = new Connection();
-            this.connections.set(guildConfig.id, connection);
-
-            // Setup connection event handlers
-            this.setupConnectionHandlers(connection, guildConfig);
-
-            // Connect to the guild
-            await connection.connect(guildConfig);
-
-            logger.minecraft(`✅ Connected to guild: ${guildConfig.name}`);
-
-            // Emit connection event
-            this.emit('connection', {
-                type: 'connect',
-                guildId: guildConfig.id,
-                guildName: guildConfig.name,
-                username: guildConfig.account.username,
-                timestamp: Date.now()
-            });
-
-        } catch (error) {
-            logger.logError(error, `Failed to connect to guild: ${guildConfig.name}`);
-
-            // Emit error event
-            this.emit('error', error, guildConfig.id);
-
-            // Schedule reconnection if enabled
-            this.scheduleReconnection(guildConfig.id);
-        }
-    }
-
-    /**
-     * Setup event handlers for a connection
-     * @param {Connection} connection - Connection instance
-     * @param {object} guildConfig - Guild configuration
-     */
-    setupConnectionHandlers(connection, guildConfig) {
-        // Message handler
-        connection.setMessageCallback((rawMessage, guildMessageData) => {
-            this.handleGuildMessage(guildConfig.id, rawMessage, guildMessageData);
-        });
-
-        // Event handler
-        connection.setEventCallback((eventData) => {
-            this.handleGuildEvent(guildConfig.id, eventData);
-        });
-
-        // Disconnection handler
-        connection.on('disconnect', (reason) => {
-            logger.minecraft(`Guild ${guildConfig.name} disconnected: ${reason}`);
+        // Monitor for disconnections
+        bot.on('end', (reason) => {
+            logger.minecraft(`Connection ended for ${connection.getGuildConfig().name}: ${reason}`);
             
-            // Emit disconnection event
             this.emit('connection', {
-                type: 'disconnect',
-                guildId: guildConfig.id,
-                guildName: guildConfig.name,
-                username: guildConfig.account.username,
-                reason: reason,
-                timestamp: Date.now()
+                type: 'disconnected',
+                guildId: guildId,
+                guildName: connection.getGuildConfig().name,
+                reason: reason
             });
 
             // Schedule reconnection
-            this.scheduleReconnection(guildConfig.id);
+            this.scheduleReconnection(guildId);
         });
 
-        // Error handler
-        connection.on('error', (error) => {
-            logger.logError(error, `Connection error for guild ${guildConfig.name}`);
+        bot.on('error', (error) => {
+            logger.logError(error, `Connection error for ${connection.getGuildConfig().name}`);
             
-            // Emit error event
-            this.emit('error', error, guildConfig.id);
+            this.emit('error', error, guildId);
         });
+
+        // Note: Message handling is now done via callbacks in connection.js
+        // We don't need to monitor messages here anymore
     }
 
     /**
@@ -216,33 +183,6 @@ class BotManager extends EventEmitter {
     }
 
     /**
-     * Handle guild events
-     * @param {string} guildId - Guild ID
-     * @param {object} eventData - Event data
-     */
-    handleGuildEvent(guildId, eventData) {
-        const connection = this.connections.get(guildId);
-        if (!connection) {
-            logger.warn(`Received event for unknown guild: ${guildId}`);
-            return;
-        }
-
-        const guildConfig = connection.getGuildConfig();
-        
-        try {
-            // Add guild information to event data
-            eventData.guildId = guildId;
-            eventData.guildName = guildConfig.name;
-
-            logger.bridge(`[GUILD] [${guildConfig.name}] Emitting event - Type: ${eventData.type}, Username: ${eventData.username || 'system'}`);
-            this.emit('event', eventData);
-            
-        } catch (error) {
-            logger.logError(error, `Error processing guild event for ${guildConfig.name}`);
-        }
-    }
-
-    /**
      * Handle inter-guild processing for messages and events
      * @param {object} result - Processed message/event result
      * @param {object} guildConfig - Guild configuration
@@ -259,10 +199,6 @@ class BotManager extends EventEmitter {
                 // Process guild chat message for inter-guild transfer
                 await this.interGuildManager.processGuildMessage(result.data, guildConfig, this);
                 
-            } else if (result.category === 'message' && result.data.type === 'officer_chat') {
-                // Process officer chat message for inter-guild transfer
-                await this.interGuildManager.processOfficerMessage(result.data, guildConfig, this);
-                
             } else if (result.category === 'event' && result.data.parsedSuccessfully) {
                 // Process guild event for inter-guild transfer
                 await this.interGuildManager.processGuildEvent(result.data, guildConfig, this);
@@ -273,13 +209,10 @@ class BotManager extends EventEmitter {
         }
     }
 
-    /**
-     * Schedule reconnection for a guild
-     * @param {string} guildId - Guild ID
-     */
     scheduleReconnection(guildId) {
         const connection = this.connections.get(guildId);
-        if (!connection) return;
+        if (!connection)
+            return;
 
         const guildConfig = connection.getGuildConfig();
         const reconnectionConfig = guildConfig.account.reconnection;
@@ -302,133 +235,144 @@ class BotManager extends EventEmitter {
 
         const timer = setTimeout(async () => {
             try {
-                this.reconnectTimers.delete(guildId);
-                await this.startConnection(guildConfig);
+                logger.minecraft(`Attempting reconnection for ${guildConfig.name}`);
+                await connection.reconnect();
+                
+                // Setup monitoring again
+                this.setupConnectionMonitoring(guildId);
+                
+                this.emit('connection', {
+                    type: 'reconnected',
+                    guildId: guildId,
+                    guildName: guildConfig.name,
+                    username: guildConfig.account.username
+                });
+                
             } catch (error) {
                 logger.logError(error, `Reconnection failed for ${guildConfig.name}`);
+                this.scheduleReconnection(guildId);
             }
         }, delay);
 
         this.reconnectTimers.set(guildId, timer);
     }
 
-    // ==================== MESSAGE SENDING METHODS ====================
+    async stopAll() {
+        // Clear all reconnection timers
+        for (const timer of this.reconnectTimers.values()) {
+            clearTimeout(timer);
+        }
+        this.reconnectTimers.clear();
 
-    /**
-     * Send message to guild chat
-     * @param {string} guildId - Guild ID
-     * @param {string} message - Message to send
-     * @returns {Promise} Send promise
-     */
+        // Stop inter-guild manager
+        if (this.interGuildManager) {
+            this.interGuildManager.stopQueueProcessor();
+        }
+
+        // Disconnect all connections
+        const disconnectPromises = [];
+        
+        for (const [guildId, connection] of this.connections) {
+            const promise = connection.disconnect();
+            disconnectPromises.push(promise);
+        }
+
+        await Promise.allSettled(disconnectPromises);
+        logger.minecraft('All connections stopped');
+    }
+
+    // Public methods for message sending
     async sendMessage(guildId, message) {
         const connection = this.connections.get(guildId);
         if (!connection) {
-            throw new Error(`No connection found for guild: ${guildId}`);
+            const error = `No connection found for guild: ${guildId}`;
+            logger.error(`[INTER-GUILD] ${error}`);
+            throw new Error(error);
         }
 
+        if (!connection.isconnected()) {
+            const error = `Guild ${guildId} is not connected`;
+            logger.error(`[INTER-GUILD] ${error}`);
+            throw new Error(error);
+        }
+
+        logger.bridge(`[INTER-GUILD] BotManager sending guild message to ${guildId}: "${message}"`);
+        
         try {
-            await connection.sendMessage(message);
-            logger.debug(`[BOT] Guild message sent to ${guildId}: "${message}"`);
+            const result = await connection.sendMessage(message);
+            logger.bridge(`[INTER-GUILD] Guild message sent successfully to ${connection.getGuildConfig().name}`);
+            return result;
         } catch (error) {
-            logger.logError(error, `Failed to send guild message to ${guildId}`);
+            logger.logError(error, `[INTER-GUILD] Failed to send guild message to ${connection.getGuildConfig().name}`);
             throw error;
         }
     }
 
-    /**
-     * Send message to officer chat (NEW - for bidirectional bridge)
-     * @param {string} guildId - Guild ID
-     * @param {string} message - Message to send
-     * @returns {Promise} Send promise
-     */
     async sendOfficerMessage(guildId, message) {
         const connection = this.connections.get(guildId);
         if (!connection) {
-            throw new Error(`No connection found for guild: ${guildId}`);
+            const error = `No connection found for guild: ${guildId}`;
+            logger.error(`[INTER-GUILD] ${error}`);
+            throw new Error(error);
         }
 
+        if (!connection.isconnected()) {
+            const error = `Guild ${guildId} is not connected`;
+            logger.error(`[INTER-GUILD] ${error}`);
+            throw new Error(error);
+        }
+
+        logger.bridge(`[INTER-GUILD] BotManager sending officer message to ${guildId}: "${message}"`);
+        
         try {
-            // Check if connection has sendOfficerMessage method
-            if (typeof connection.sendOfficerMessage === 'function') {
-                await connection.sendOfficerMessage(message);
-            } else {
-                // Fallback: use executeCommand
-                await connection.executeCommand(`/oc ${message}`);
-            }
-            logger.debug(`[BOT] Officer message sent to ${guildId}: "${message}"`);
+            const result = await connection.sendOfficerMessage(message);
+            logger.bridge(`[INTER-GUILD] Officer message sent successfully to ${connection.getGuildConfig().name}`);
+            return result;
         } catch (error) {
-            logger.logError(error, `Failed to send officer message to ${guildId}`);
+            logger.logError(error, `[INTER-GUILD] Failed to send officer message to ${connection.getGuildConfig().name}`);
             throw error;
         }
     }
 
-    /**
-     * Execute command on a guild bot
-     * @param {string} guildId - Guild ID
-     * @param {string} command - Command to execute
-     * @returns {Promise} Execute promise
-     */
     async executeCommand(guildId, command) {
         const connection = this.connections.get(guildId);
         if (!connection) {
             throw new Error(`No connection found for guild: ${guildId}`);
         }
 
-        try {
-            await connection.executeCommand(command);
-            logger.debug(`[BOT] Command executed on ${guildId}: "${command}"`);
-        } catch (error) {
-            logger.logError(error, `Failed to execute command on ${guildId}`);
-            throw error;
+        if (!connection.isconnected()) {
+            throw new Error(`Guild ${guildId} is not connected`);
         }
+
+        return connection.executeCommand(command);
     }
 
-    // ==================== STATUS AND INFORMATION METHODS ====================
-
-    /**
-     * Get connection status for all guilds
-     * @returns {object} Connection status object
-     */
+    // Status methods
     getConnectionStatus() {
         const status = {};
         
-        for (const [guildId, connection] of this.connections.entries()) {
-            status[guildId] = {
-                connected: connection.isConnected(),
-                lastSeen: connection.getLastSeen ? connection.getLastSeen() : Date.now(),
-                errors: connection.getErrorCount ? connection.getErrorCount() : 0,
-                messages: connection.getMessageCount ? connection.getMessageCount() : 0
-            };
+        for (const [guildId, connection] of this.connections) {
+            status[guildId] = connection.getConnectionStatus();
         }
 
         return status;
     }
 
-    /**
-     * Check if a specific guild is connected
-     * @param {string} guildId - Guild ID
-     * @returns {boolean} Connection status
-     */
     isGuildConnected(guildId) {
         const connection = this.connections.get(guildId);
-        return connection ? connection.isConnected() : false;
+        return connection ? connection.isconnected() : false;
     }
 
-    /**
-     * Get list of connected guilds (using existing structure)
-     * @returns {Array} Array of connected guild objects
-     */
     getConnectedGuilds() {
         const connectedGuilds = [];
         
-        for (const [guildId, connection] of this.connections.entries()) {
-            if (connection.isConnected()) {
-                const guildConfig = connection.getGuildConfig();
+        for (const [guildId, connection] of this.connections) {
+            if (connection.isconnected()) {
                 connectedGuilds.push({
                     guildId: guildId,
-                    guildName: guildConfig.name,
-                    username: guildConfig.account.username,
-                    guildTag: guildConfig.tag || guildConfig.name
+                    guildName: connection.getGuildConfig().name,
+                    username: connection.getGuildConfig().account.username,
+                    guildTag: connection.getGuildConfig().tag
                 });
             }
         }
@@ -436,12 +380,7 @@ class BotManager extends EventEmitter {
         return connectedGuilds;
     }
 
-    // ==================== INTER-GUILD MANAGER METHODS ====================
-
-    /**
-     * Get inter-guild statistics
-     * @returns {object} Inter-guild statistics
-     */
+    // Inter-guild manager methods
     getInterGuildStats() {
         if (!this.interGuildManager) {
             return null;
@@ -450,10 +389,6 @@ class BotManager extends EventEmitter {
         return this.interGuildManager.getStatistics();
     }
 
-    /**
-     * Update inter-guild configuration
-     * @param {object} newConfig - New configuration
-     */
     updateInterGuildConfig(newConfig) {
         if (this.interGuildManager) {
             this.interGuildManager.updateConfig(newConfig);
@@ -461,11 +396,6 @@ class BotManager extends EventEmitter {
         }
     }
 
-    /**
-     * Test inter-guild message formatting
-     * @param {object} testData - Test data
-     * @returns {object} Test result
-     */
     testInterGuildFormatting(testData) {
         if (!this.interGuildManager) {
             return { error: 'InterGuildManager not available' };
@@ -474,9 +404,6 @@ class BotManager extends EventEmitter {
         return this.interGuildManager.testMessageFormatting(testData);
     }
 
-    /**
-     * Clear inter-guild cache
-     */
     clearInterGuildCache() {
         if (this.interGuildManager) {
             this.interGuildManager.clearQueue();
@@ -485,160 +412,21 @@ class BotManager extends EventEmitter {
         }
     }
 
-    // ==================== EVENT FORWARDING METHODS ====================
-
-    /**
-     * Register message event handler
-     * @param {function} callback - Callback function
-     */
+    // Event forwarding methods
     onMessage(callback) {
         this.on('message', callback);
     }
 
-    /**
-     * Register event handler
-     * @param {function} callback - Callback function
-     */
     onEvent(callback) {
         this.on('event', callback);
     }
 
-    /**
-     * Register connection event handler
-     * @param {function} callback - Callback function
-     */
     onConnection(callback) {
         this.on('connection', callback);
     }
 
-    /**
-     * Register error event handler
-     * @param {function} callback - Callback function
-     */
     onError(callback) {
         this.on('error', callback);
-    }
-
-    // ==================== DEBUGGING AND UTILITIES ====================
-
-    /**
-     * Get BotManager statistics
-     * @returns {object} Statistics object
-     */
-    getStatistics() {
-        return {
-            totalConnections: this.connections.size,
-            connectedGuilds: this.getConnectedGuilds().length,
-            reconnectTimers: this.reconnectTimers.size,
-            interGuildStats: this.getInterGuildStats()
-        };
-    }
-
-    /**
-     * Get debugging information
-     * @returns {object} Debug information
-     */
-    getDebugInfo() {
-        const connectionDetails = {};
-        
-        for (const [guildId, connection] of this.connections.entries()) {
-            const guildConfig = connection.getGuildConfig();
-            connectionDetails[guildId] = {
-                name: guildConfig.name,
-                tag: guildConfig.tag,
-                username: guildConfig.account.username,
-                connected: connection.isConnected(),
-                lastSeen: connection.getLastSeen ? connection.getLastSeen() : null,
-                hasReconnectTimer: this.reconnectTimers.has(guildId)
-            };
-        }
-
-        return {
-            connections: this.connections.size,
-            reconnectTimers: this.reconnectTimers.size,
-            stats: this.getStatistics(),
-            connectionDetails,
-            interGuildStats: this.getInterGuildStats()
-        };
-    }
-
-    /**
-     * Test message sending capabilities
-     * @param {string} guildId - Guild ID to test
-     * @param {object} testOptions - Test options
-     * @returns {object} Test result
-     */
-    async testMessageSending(guildId, testOptions = {}) {
-        try {
-            const connection = this.connections.get(guildId);
-            if (!connection) {
-                return { success: false, error: `No connection found for guild: ${guildId}` };
-            }
-
-            if (!connection.isConnected()) {
-                return { success: false, error: `Guild ${guildId} is not connected` };
-            }
-
-            const testMessage = testOptions.message || 'Bridge test message';
-            const testType = testOptions.type || 'guild'; // 'guild' or 'officer'
-
-            const results = [];
-
-            // Test guild message
-            if (testType === 'guild' || testType === 'both') {
-                try {
-                    await this.sendMessage(guildId, `[TEST] ${testMessage}`);
-                    results.push({ type: 'guild', success: true });
-                } catch (error) {
-                    results.push({ type: 'guild', success: false, error: error.message });
-                }
-            }
-
-            // Test officer message
-            if (testType === 'officer' || testType === 'both') {
-                try {
-                    await this.sendOfficerMessage(guildId, `[TEST] ${testMessage}`);
-                    results.push({ type: 'officer', success: true });
-                } catch (error) {
-                    results.push({ type: 'officer', success: false, error: error.message });
-                }
-            }
-
-            return {
-                success: true,
-                guildId,
-                testMessage,
-                results
-            };
-
-        } catch (error) {
-            logger.logError(error, `Error testing message sending for guild ${guildId}`);
-            return { success: false, error: error.message };
-        }
-    }
-
-    /**
-     * Cleanup resources
-     */
-    cleanup() {
-        // Clear reconnect timers
-        for (const timer of this.reconnectTimers.values()) {
-            clearTimeout(timer);
-        }
-        this.reconnectTimers.clear();
-
-        // Cleanup connections
-        for (const connection of this.connections.values()) {
-            connection.removeAllListeners();
-        }
-        this.connections.clear();
-
-        // Cleanup inter-guild manager
-        if (this.interGuildManager) {
-            this.interGuildManager.cleanup();
-        }
-
-        logger.debug('BotManager cleaned up');
     }
 }
 

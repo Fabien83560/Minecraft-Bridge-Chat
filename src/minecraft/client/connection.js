@@ -357,7 +357,7 @@ class MinecraftConnection {
                 }
             } else {
                 // Not a guild message, ignore it completely
-                logger.debug(`[${this._guildConfig.name}] Non-guild message ignored: ${message.toString().substring(0, 50)}...`);
+                logger.debug(`[${this._guildConfig.name}] Non-guild message ignored: ${message.toString()}`);
             }
             
         } catch (error) {

@@ -1,6 +1,6 @@
 // Globals Imports
 const { Collection, Events, REST, Routes } = require('discord.js');
-const { readdirSync } = require('fs');
+const { readdirSync, statSync } = require('fs');
 const { join } = require('path');
 const EventEmitter = require('events');
 
@@ -45,7 +45,7 @@ class SlashCommandHandler extends EventEmitter {
         this.client = client;
 
         try {
-            // Load all commands from the commands directory
+            // Load all commands from the commands directory and subdirectories
             await this.loadCommands();
             
             // Register slash commands with Discord
@@ -63,41 +63,13 @@ class SlashCommandHandler extends EventEmitter {
     }
 
     /**
-     * Load all commands from the commands directory
+     * Load all commands from the commands directory and subdirectories
      */
     async loadCommands() {
         const commandsPath = join(__dirname, '../commands');
         
         try {
-            const commandFiles = readdirSync(commandsPath).filter(file => file.endsWith('.js'));
-
-            for (const file of commandFiles) {
-                const filePath = join(commandsPath, file);
-                
-                try {
-                    // Clear require cache to allow hot reloading
-                    delete require.cache[require.resolve(filePath)];
-                    
-                    const command = require(filePath);
-                    
-                    // Validate command structure
-                    if (!command.data || !command.execute) {
-                        logger.warn(`Command file ${file} is missing required 'data' or 'execute' property`);
-                        continue;
-                    }
-
-                    // Store command
-                    this.commands.set(command.data.name, command);
-                    this.commandsData.push(command.data.toJSON());
-                    
-                    this.stats.commandsLoaded++;
-                    logger.debug(`Loaded slash command: ${command.data.name}`);
-                    
-                } catch (error) {
-                    logger.logError(error, `Failed to load command file: ${file}`);
-                }
-            }
-
+            await this.loadCommandsFromDirectory(commandsPath);
             logger.discord(`Loaded ${this.stats.commandsLoaded} slash commands`);
 
         } catch (error) {
@@ -108,6 +80,66 @@ class SlashCommandHandler extends EventEmitter {
             } else {
                 logger.logError(error, 'Failed to load commands directory');
             }
+        }
+    }
+
+    /**
+     * Recursively load commands from a directory
+     * @param {string} dirPath - Directory path to scan
+     * @param {boolean} isSubdirectory - Whether this is a subdirectory (default: false)
+     */
+    async loadCommandsFromDirectory(dirPath, isSubdirectory = false) {
+        try {
+            const items = readdirSync(dirPath);
+
+            for (const item of items) {
+                const itemPath = join(dirPath, item);
+                const itemStats = statSync(itemPath);
+
+                if (itemStats.isDirectory()) {
+                    // Skip subdirectories for command loading
+                    // Subdirectories contain subcommand modules, not full commands
+                    logger.debug(`Skipping subdirectory: ${item} (contains subcommand modules)`);
+                    continue;
+                } else if (item.endsWith('.js')) {
+                    // Only load command files from the main commands directory
+                    if (!isSubdirectory) {
+                        await this.loadCommandFile(itemPath, item);
+                    }
+                }
+            }
+        } catch (error) {
+            logger.logError(error, `Failed to load commands from directory: ${dirPath}`);
+        }
+    }
+
+    /**
+     * Load a single command file
+     * @param {string} filePath - Path to the command file
+     * @param {string} fileName - Name of the file
+     */
+    async loadCommandFile(filePath, fileName) {
+        try {
+            // Clear require cache to allow hot reloading
+            delete require.cache[require.resolve(filePath)];
+            
+            const command = require(filePath);
+            
+            // Validate command structure
+            if (!command.data || !command.execute) {
+                logger.debug(`Skipping ${fileName} - not a complete slash command (likely a subcommand module)`);
+                return;
+            }
+
+            // Store command
+            this.commands.set(command.data.name, command);
+            this.commandsData.push(command.data.toJSON());
+            
+            this.stats.commandsLoaded++;
+            logger.debug(`Loaded slash command: ${command.data.name} from ${fileName}`);
+            
+        } catch (error) {
+            logger.logError(error, `Failed to load command file: ${fileName}`);
         }
     }
 
@@ -170,8 +202,12 @@ class SlashCommandHandler extends EventEmitter {
                     return;
                 }
 
-                // Execute command
-                await command.execute(interaction);
+                // Execute command with full context
+                await command.execute(interaction, {
+                    client: this.client,
+                    config: this.config,
+                    bridgeLocator: BridgeLocator.getInstance()
+                });
                 
                 logger.discord(`Executed slash command: ${interaction.commandName} by ${interaction.user.displayName}`);
 
@@ -181,10 +217,14 @@ class SlashCommandHandler extends EventEmitter {
 
                 const errorMessage = 'There was an error while executing this command!';
                 
-                if (interaction.replied || interaction.deferred) {
-                    await interaction.followUp({ content: errorMessage, ephemeral: true });
-                } else {
-                    await interaction.reply({ content: errorMessage, ephemeral: true });
+                try {
+                    if (interaction.replied || interaction.deferred) {
+                        await interaction.followUp({ content: errorMessage, ephemeral: true });
+                    } else {
+                        await interaction.reply({ content: errorMessage, ephemeral: true });
+                    }
+                } catch (replyError) {
+                    logger.logError(replyError, 'Failed to send error message to user');
                 }
             }
         });

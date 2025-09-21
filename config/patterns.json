@@ -790,7 +790,188 @@
             "pattern": "^You do not have permission",
             "description": "Permission error messages"
           }
-        ]
+        ],
+        "commandsResponse": {
+          "invite": {
+            "success": [
+              {
+                "pattern": "You invited \\[.+\\] (\\w+) to your guild\\. They have 5 minutes to accept\\.",
+                "groups": ["username"],
+                "description": "Successful guild invite with 5 minute timer"
+              },
+              {
+                "pattern": "You sent an offline invite to \\[.+\\] (\\w+)! They will have 5 minutes to accept once they come online!",
+                "groups": ["username"],
+                "description": "Successful offline guild invite"
+              }
+            ],
+            "error": [
+              {
+                "pattern": "You do not have permission to invite players!",
+                "groups": [],
+                "description": "No permission to invite"
+              },
+              {
+                "pattern": "\\[.+\\] (\\w+) is already in your guild!",
+                "groups": ["username"],
+                "description": "Player already in this guild"
+              },
+              {
+                "pattern": "\\[.+\\] (\\w+) is already in another guild!",
+                "groups": ["username"],
+                "description": "Player already in another guild"
+              },
+              {
+                "pattern": "Your guild is full!",
+                "groups": [],
+                "description": "Guild at maximum capacity"
+              },
+              {
+                "pattern": "Can't find a player by the name of '(\\w+)'",
+                "groups": ["username"],
+                "description": "Player not found"
+              },
+              {
+                "pattern": "You've already invited \\[.+\\] (\\w+) to your guild! Wait for them to accept!",
+                "groups": ["username"],
+                "description": "Player already have a waiting invitation"
+              }
+            ]
+          },
+          "kick": {
+            "success": [
+              {
+                "pattern": "You kicked \\[.+\\] (\\w+) from the guild!",
+                "groups": ["username"],
+                "description": "Successful guild kick"
+              }
+            ],
+            "error": [
+              {
+                "pattern": "\\[.+\\] (\\w+) is not in your guild!",
+                "groups": ["username"],
+                "description": "Player not in guild (with rank)"
+              },
+              {
+                "pattern": "That player is not in your guild!",
+                "groups": [],
+                "description": "Player not in guild (generic)"
+              },
+              {
+                "pattern": "You do not have permission to kick players!",
+                "groups": [],
+                "description": "No permission to kick"
+              },
+              {
+                "pattern": "Can't find a player by the name of '(\\w+)'",
+                "groups": ["username"],
+                "description": "Player not found"
+              }
+            ]
+          },
+          "promote": {
+            "success": [
+              {
+                "pattern": "(?:You promoted|promoted) (\\w+)",
+                "groups": ["username"],
+                "description": "Successful guild promotion"
+              },
+              {
+                "pattern": "(\\w+) has been promoted",
+                "groups": ["username"],
+                "description": "Player promoted confirmation"
+              },
+              {
+                "pattern": "Successfully promoted (\\w+)",
+                "groups": ["username"],
+                "description": "Promotion success message"
+              }
+            ],
+            "error": [
+              {
+                "pattern": "You cannot promote (\\w+)!",
+                "groups": ["username"],
+                "description": "Cannot promote specific player"
+              },
+              {
+                "pattern": "(\\w+) is not in your guild!",
+                "groups": ["username"],
+                "description": "Player not in guild"
+              },
+              {
+                "pattern": "Player (\\w+) not found!",
+                "groups": ["username"],
+                "description": "Player not found"
+              },
+              {
+                "pattern": "You don't have permission to promote players!",
+                "groups": [],
+                "description": "No permission to promote"
+              },
+              {
+                "pattern": "(\\w+) is already at the highest rank!",
+                "groups": ["username"],
+                "description": "Player already at maximum rank"
+              },
+              {
+                "pattern": "You cannot promote this player!",
+                "groups": [],
+                "description": "Cannot promote this specific player"
+              }
+            ]
+          },
+          "demote": {
+            "success": [
+              {
+                "pattern": "(?:You demoted|demoted) (\\w+)",
+                "groups": ["username"],
+                "description": "Successful guild demotion"
+              },
+              {
+                "pattern": "(\\w+) has been demoted",
+                "groups": ["username"],
+                "description": "Player demoted confirmation"
+              },
+              {
+                "pattern": "Successfully demoted (\\w+)",
+                "groups": ["username"],
+                "description": "Demotion success message"
+              }
+            ],
+            "error": [
+              {
+                "pattern": "You cannot demote (\\w+)!",
+                "groups": ["username"],
+                "description": "Cannot demote specific player"
+              },
+              {
+                "pattern": "(\\w+) is not in your guild!",
+                "groups": ["username"],
+                "description": "Player not in guild"
+              },
+              {
+                "pattern": "Player (\\w+) not found!",
+                "groups": ["username"],
+                "description": "Player not found"
+              },
+              {
+                "pattern": "You don't have permission to demote players!",
+                "groups": [],
+                "description": "No permission to demote"
+              },
+              {
+                "pattern": "(\\w+) is already at the lowest rank!",
+                "groups": ["username"],
+                "description": "Player already at minimum rank"
+              },
+              {
+                "pattern": "You cannot demote this player!",
+                "groups": [],
+                "description": "Cannot demote this specific player"
+              }
+            ]
+          }
+        }
       }
     }
   },

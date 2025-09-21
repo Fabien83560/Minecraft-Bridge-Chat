@@ -25,15 +25,6 @@ class MessageHandler extends EventEmitter {
         // Message filtering
         this.botUsers = new Set(); // Bot users to ignore
         this.commandPrefix = this.config.get('bridge.commandPrefix') || '!';
-        
-        // Statistics
-        this.stats = {
-            messagesReceived: 0,
-            messagesProcessed: 0,
-            commandsReceived: 0,
-            messagesFiltered: 0,
-            errors: 0
-        };
 
         // Initialize components that don't require Discord client
         this.initializeComponents();
@@ -137,17 +128,14 @@ class MessageHandler extends EventEmitter {
      */
     async handleMessage(message) {
         try {
-            this.stats.messagesReceived++;
 
             // Filter out messages we should ignore
             if (!this.shouldProcessMessage(message)) {
-                this.stats.messagesFiltered++;
                 return;
             }
 
             // Check if it's a command
             if (message.content.startsWith(this.commandPrefix)) {
-                this.stats.commandsReceived++;
                 this.emit('command', {
                     message,
                     command: message.content.substring(this.commandPrefix.length).trim(),
@@ -160,14 +148,12 @@ class MessageHandler extends EventEmitter {
             // Process regular message
             const processedMessage = this.processMessage(message);
             if (processedMessage) {
-                this.stats.messagesProcessed++;
                 this.emit('message', processedMessage);
                 
                 logger.discord(`[DISCORD] Received message from ${message.author.displayName}: "${message.content}"`);
             }
 
         } catch (error) {
-            this.stats.errors++;
             logger.logError(error, 'Error handling Discord message');
         }
     }
@@ -360,29 +346,6 @@ class MessageHandler extends EventEmitter {
      */
     isMonitoredChannel(channelId) {
         return channelId === this.channels.chat?.id || channelId === this.channels.staff?.id;
-    }
-
-    /**
-     * Get statistics
-     * @returns {object} Handler statistics
-     */
-    getStatistics() {
-        return {
-            ...this.stats,
-            botUsersIgnored: this.botUsers.size,
-            channels: {
-                chat: this.channels.chat ? {
-                    id: this.channels.chat.id,
-                    name: this.channels.chat.name
-                } : null,
-                staff: this.channels.staff ? {
-                    id: this.channels.staff.id,
-                    name: this.channels.staff.name
-                } : null
-            },
-            commandPrefix: this.commandPrefix,
-            clientReady: !!this.client
-        };
     }
 
     /**

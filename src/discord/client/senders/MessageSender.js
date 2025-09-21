@@ -27,17 +27,6 @@ class MessageSender {
         this.rateLimiter = new Map(); // channelId -> last message times
         this.rateLimit = this.config.get('bridge.rateLimit.discord') || { limit: 5, window: 10000 };
 
-        // Statistics
-        this.stats = {
-            messagesSent: 0,
-            eventsSent: 0,
-            systemMessagesSent: 0,
-            rateLimitHits: 0,
-            webhooksSent: 0,
-            embedsSent: 0,
-            errors: 0
-        };
-
         // Initialize only the components that don't require Discord client
         this.initializeComponents();
     }
@@ -171,7 +160,6 @@ class MessageSender {
 
             // Check rate limiting
             if (this.isRateLimited(channel.id)) {
-                this.stats.rateLimitHits++;
                 logger.warn(`Rate limit hit for Discord channel ${channel.name}`);
                 return null;
             }
@@ -190,11 +178,9 @@ class MessageSender {
                 this.config.get('bridge.webhook.useForGuildMessages') !== false) {
                 
                 result = await this.sendViaWebhook(messageData, guildConfig, channelType);
-                this.stats.webhooksSent++;
             } else {
                 // Send via regular channel
                 result = await this.sendViaChannel(formattedMessage, channel);
-                this.stats.messagesSent++;
             }
 
             // Update rate limiting
@@ -205,7 +191,6 @@ class MessageSender {
             return result;
 
         } catch (error) {
-            this.stats.errors++;
             logger.logError(error, 'Failed to send guild message to Discord');
             throw error;
         }
@@ -231,7 +216,6 @@ class MessageSender {
 
             // Check rate limiting
             if (this.isRateLimited(channel.id)) {
-                this.stats.rateLimitHits++;
                 logger.warn(`Rate limit hit for Discord channel ${channel.name}`);
                 return null;
             }
@@ -247,16 +231,14 @@ class MessageSender {
             // Send the message
             const result = await this.sendViaChannel(formattedMessage, channel);
 
-            // Update rate limiting and statistics
+            // Update rate limiting
             this.updateRateLimit(channel.id);
-            this.stats.eventsSent++;
 
             logger.discord(`[DISCORD] Sent event to chat channel: "${formattedMessage}"`);
 
             return result;
 
         } catch (error) {
-            this.stats.errors++;
             logger.logError(error, 'Failed to send event to Discord');
             throw error;
         }
@@ -283,7 +265,6 @@ class MessageSender {
 
             // Check rate limiting
             if (this.isRateLimited(channel.id)) {
-                this.stats.rateLimitHits++;
                 logger.warn(`Rate limit hit for Discord channel ${channel.name}`);
                 return null;
             }
@@ -299,14 +280,11 @@ class MessageSender {
             // Send via channel
             const result = await this.sendViaChannel(formattedMessage, channel);
 
-            this.stats.systemMessagesSent++;
-
             logger.discord(`[DISCORD] Sent system message to ${channelType} channel: "${formattedMessage}"`);
 
             return result;
 
         } catch (error) {
-            this.stats.errors++;
             logger.logError(error, `Failed to send system message to Discord ${channelType} channel`);
             throw error;
         }
@@ -368,7 +346,6 @@ class MessageSender {
             return result;
 
         } catch (error) {
-            this.stats.errors++;
             logger.logError(error, 'Failed to send connection status to Discord');
             throw error;
         }
@@ -471,29 +448,6 @@ class MessageSender {
      */
     getChannel(channelType) {
         return this.channels[channelType] || null;
-    }
-
-    /**
-     * Get statistics
-     * @returns {object} Sender statistics
-     */
-    getStatistics() {
-        return {
-            ...this.stats,
-            rateLimiterSize: this.rateLimiter.size,
-            channels: {
-                chat: this.channels.chat ? {
-                    id: this.channels.chat.id,
-                    name: this.channels.chat.name
-                } : null,
-                staff: this.channels.staff ? {
-                    id: this.channels.staff.id,
-                    name: this.channels.staff.name
-                } : null
-            },
-            webhookEnabled: !!this.webhookSender,
-            clientReady: !!this.client
-        };
     }
 
     /**

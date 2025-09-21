@@ -22,25 +22,6 @@ class BridgeCoordinator {
             systemMessagesToDiscord: true
         };
 
-        // Statistics
-        this.stats = {
-            minecraftToDiscord: {
-                guildMessages: 0,
-                officerMessages: 0,
-                events: 0,
-                systemMessages: 0,
-                errors: 0
-            },
-            discordToMinecraft: {
-                messages: 0,
-                errors: 0
-            },
-            totalProcessed: 0,
-            totalErrors: 0,
-            lastMessageTime: null,
-            lastEventTime: null
-        };
-
         logger.debug('BridgeCoordinator initialized');
     }
 
@@ -168,21 +149,9 @@ class BridgeCoordinator {
             const result = await this.discordManager.sendGuildMessage(messageData, guildConfig);
             logger.debug(`[MC→DC] Discord send result: ${JSON.stringify(result)}`);
 
-            // Update statistics
-            if (messageData.chatType === 'officer') {
-                this.stats.minecraftToDiscord.officerMessages++;
-            } else {
-                this.stats.minecraftToDiscord.guildMessages++;
-            }
-            
-            this.stats.totalProcessed++;
-            this.stats.lastMessageTime = Date.now();
-
             logger.discord(`[MC→DC] ✅ Message successfully bridged to Discord`);
 
         } catch (error) {
-            this.stats.minecraftToDiscord.errors++;
-            this.stats.totalErrors++;
             logger.logError(error, `Error bridging Minecraft message to Discord from guild ${messageData.guildId}`);
         }
     }
@@ -221,16 +190,9 @@ class BridgeCoordinator {
             const result = await this.discordManager.sendGuildEvent(eventData, guildConfig);
             logger.debug(`[MC→DC] Discord event send result: ${JSON.stringify(result)}`);
 
-            // Update statistics
-            this.stats.minecraftToDiscord.events++;
-            this.stats.totalProcessed++;
-            this.stats.lastEventTime = Date.now();
-
             logger.discord(`[MC→DC] ✅ Event successfully bridged to Discord`);
 
         } catch (error) {
-            this.stats.minecraftToDiscord.errors++;
-            this.stats.totalErrors++;
             logger.logError(error, `Error bridging Minecraft event to Discord from guild ${eventData.guildId}`);
         }
     }
@@ -279,15 +241,9 @@ class BridgeCoordinator {
             );
             logger.debug(`[MC→DC] Discord connection status send result: ${JSON.stringify(result)}`);
 
-            // Update statistics
-            this.stats.minecraftToDiscord.systemMessages++;
-            this.stats.totalProcessed++;
-
             logger.discord(`[MC→DC] ✅ Connection event successfully bridged to Discord`);
 
         } catch (error) {
-            this.stats.minecraftToDiscord.errors++;
-            this.stats.totalErrors++;
             logger.logError(error, `Error bridging Minecraft connection event to Discord`);
         }
     }
@@ -357,19 +313,9 @@ class BridgeCoordinator {
                 }
             }
 
-            // Update statistics
-            this.stats.discordToMinecraft.messages++;
-            if (errorCount > 0) {
-                this.stats.discordToMinecraft.errors += errorCount;
-                this.stats.totalErrors += errorCount;
-            }
-            this.stats.totalProcessed++;
-
             logger.discord(`[DC→MC] ✅ Discord message bridged to ${successCount}/${connectedGuilds.length} Minecraft guilds`);
 
         } catch (error) {
-            this.stats.discordToMinecraft.errors++;
-            this.stats.totalErrors++;
             logger.logError(error, `Error bridging Discord message to Minecraft`);
         }
     }
@@ -440,54 +386,12 @@ class BridgeCoordinator {
     }
 
     /**
-     * Get coordinator statistics
-     * @returns {object} Statistics object
-     */
-    getStatistics() {
-        return {
-            ...this.stats,
-            routing: this.routingConfig,
-            managers: {
-                discord: !!this.discordManager,
-                minecraft: !!this.minecraftManager,
-                discordConnected: this.discordManager ? this.discordManager.isConnected() : false
-            },
-            uptime: process.uptime()
-        };
-    }
-
-    /**
      * Update routing configuration
      * @param {object} newConfig - New routing configuration
      */
     updateRoutingConfig(newConfig) {
         this.routingConfig = { ...this.routingConfig, ...newConfig };
         logger.bridge('BridgeCoordinator routing configuration updated');
-    }
-
-    /**
-     * Reset statistics
-     */
-    resetStatistics() {
-        this.stats = {
-            minecraftToDiscord: {
-                guildMessages: 0,
-                officerMessages: 0,
-                events: 0,
-                systemMessages: 0,
-                errors: 0
-            },
-            discordToMinecraft: {
-                messages: 0,
-                errors: 0
-            },
-            totalProcessed: 0,
-            totalErrors: 0,
-            lastMessageTime: null,
-            lastEventTime: null
-        };
-        
-        logger.bridge('BridgeCoordinator statistics reset');
     }
 
     /**

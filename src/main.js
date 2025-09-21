@@ -7,8 +7,6 @@ const logger = require('./shared/logger');
 const Config = require("./config/ConfigLoader.js");
 const MinecraftManager = require('./minecraft/MinecraftManager.js');
 const DiscordManager = require('./discord/DiscordManager.js');
-const SystemMonitor = require('./shared/SystemMonitor.js');
-const AdminCommands = require('./shared/AdminCommands.js');
 const BridgeLocator = require("./bridgeLocator.js");
 
 class MainBridge {
@@ -19,19 +17,6 @@ class MainBridge {
         this.config = new Config();
         this._minecraftManager = null;
         this._discordManager = null;
-        this._systemMonitor = null;
-        this._adminCommands = null;
-
-        // System statistics
-        this.stats = {
-            messagesProcessed: 0,
-            eventsProcessed: 0,
-            errors: 0,
-            startTime: this._startTime
-        };
-
-        // Health check interval
-        this._healthCheckInterval = null;
     }
 
     async start() {
@@ -79,18 +64,6 @@ class MainBridge {
         const stopStartTime = Date.now();
 
         try {
-            // Stop health checks
-            if (this._healthCheckInterval) {
-                clearInterval(this._healthCheckInterval);
-                this._healthCheckInterval = null;
-            }
-
-            // Stop system monitoring
-            if (this._systemMonitor) {
-                this._systemMonitor.stopMonitoring();
-                logger.info('✅ System monitoring stopped');
-            }
-
             // Stop Minecraft connections
             if (this._minecraftManager) {
                 await this._minecraftManager.stop();
@@ -184,14 +157,6 @@ class MainBridge {
         const stepStartTime = Date.now();
 
         try {
-            // Initialize system monitor
-            this._systemMonitor = new SystemMonitor();
-            logger.info('✅ System monitor initialized');
-
-            // Initialize admin commands
-            this._adminCommands = new AdminCommands();
-            logger.info('✅ Admin commands initialized');
-
             logger.logPerformance('Management systems initialization', stepStartTime);
             logger.info('✅ Management systems initialized');
 
@@ -211,7 +176,7 @@ class MainBridge {
             this._minecraftManager = new MinecraftManager();
             await this._minecraftManager.start();
             
-            // Set up event handlers for statistics and monitoring
+            // Set up event handlers
             this.setupMinecraftEventHandlers();
             
             logger.logPerformance('Minecraft module initialization', stepStartTime);
@@ -232,7 +197,7 @@ class MainBridge {
             this._discordManager = new DiscordManager();
             await this._discordManager.start();
             
-            // Set up event handlers for statistics and monitoring
+            // Set up event handlers
             this.setupDiscordEventHandlers();
             
             logger.logPerformance('Discord module initialization', stepStartTime);
@@ -283,24 +248,15 @@ class MainBridge {
         });
         
         this._minecraftManager.onError((error, guildId) => {
-            this.stats.errors++;
             logger.logError(error, `Minecraft connection error for guild: ${guildId}`);
         });
 
-        this._minecraftManager.onMessage((messageData) => {
-            this.stats.messagesProcessed++;
+        this._minecraftManager.onMessage((messageData) => {            
             
-            if (this.config.get('features.messageSystem.enableDebugLogging')) {
-                logger.debug(`[STATS] Messages processed: ${this.stats.messagesProcessed}`);
-            }
         });
 
-        this._minecraftManager.onEvent((eventData) => {
-            this.stats.eventsProcessed++;
+        this._minecraftManager.onEvent((eventData) => {            
             
-            if (this.config.get('features.messageSystem.enableDebugLogging')) {
-                logger.debug(`[STATS] Events processed: ${this.stats.eventsProcessed}`);
-            }
         });
     }
 
@@ -318,7 +274,6 @@ class MainBridge {
         });
         
         this._discordManager.onError((error) => {
-            this.stats.errors++;
             logger.logError(error, 'Discord connection error');
         });
 
@@ -338,9 +293,6 @@ class MainBridge {
         try {
             // Log startup summary
             this.logStartupSummary();
-
-            // Start periodic health checks
-            this.startHealthChecks();
 
             logger.logPerformance('Startup finalization', stepStartTime);
             logger.info('✅ Startup finalized');
@@ -374,36 +326,6 @@ class MainBridge {
         enabledGuilds.forEach(guild => {
             logger.info(`   • Guild: ${guild.name} [${guild.tag}] (${guild.server.serverName})`);
         });
-    }
-
-    startHealthChecks() {
-        // Periodic health checks every 10 minutes
-        this._healthCheckInterval = setInterval(() => {
-            this.performHealthCheck();
-        }, 10 * 60 * 1000);
-
-        logger.debug('Health checks started (10-minute interval)');
-    }
-
-    async performHealthCheck() {
-        try {
-            if (!this._adminCommands) {
-                return;
-            }
-
-            const health = await this._adminCommands.getHealthStatus();
-            
-            if (health.overall === 'critical') {
-                logger.error(`🚨 CRITICAL system health issues detected: ${health.issues.join(', ')}`);
-            } else if (health.overall === 'warning') {
-                logger.warn(`⚠️ System health warnings: ${[...health.issues, ...health.warnings].join(', ')}`);
-            } else {
-                logger.debug('✅ System health check passed');
-            }
-
-        } catch (error) {
-            logger.logError(error, 'Error during health check');
-        }
     }
 
     getRequiredDirectories() {
@@ -468,49 +390,6 @@ class MainBridge {
         return this._isRunning;
     }
 
-    // Administration and monitoring methods
-    async executeAdminCommand(commandLine) {
-        if (!this._adminCommands) {
-            return { success: false, error: 'Admin commands not initialized' };
-        }
-
-        return await this._adminCommands.executeCommand(commandLine);
-    }
-
-    getSystemStats() {
-        const baseStats = {
-            ...this.stats,
-            uptime: Date.now() - this._startTime,
-            isRunning: this._isRunning
-        };
-
-        if (this._minecraftManager) {
-            baseStats.minecraft = {
-                connections: this._minecraftManager.getConnectionStatus(),
-                connectedGuilds: this._minecraftManager.getConnectedGuilds(),
-                interGuildStats: this._minecraftManager.getInterGuildStats()
-            };
-        }
-
-        if (this._discordManager) {
-            baseStats.discord = this._discordManager.getStatistics();
-        }
-
-        if (this._systemMonitor) {
-            baseStats.monitoring = this._systemMonitor.getStatistics();
-        }
-
-        return baseStats;
-    }
-
-    async getHealthStatus() {
-        if (!this._adminCommands) {
-            return { overall: 'unknown', error: 'Health system not initialized' };
-        }
-
-        return await this._adminCommands.getHealthStatus();
-    }
-
     formatUptime(ms) {
         const seconds = Math.floor(ms / 1000);
         const minutes = Math.floor(seconds / 60);
@@ -544,14 +423,6 @@ class MainBridge {
         return updatedConfig;
     }
 
-    testInterGuildFormatting(testData) {
-        if (!this._minecraftManager) {
-            return { error: 'Minecraft manager not initialized' };
-        }
-
-        return this._minecraftManager.testMessageFormatting(testData);
-    }
-
     // Convenience methods for external access
     getMinecraftManager() {
         return this._minecraftManager;
@@ -559,14 +430,6 @@ class MainBridge {
 
     getDiscordManager() {
         return this._discordManager;
-    }
-
-    getSystemMonitor() {
-        return this._systemMonitor;
-    }
-
-    getAdminCommands() {
-        return this._adminCommands;
     }
 }
 

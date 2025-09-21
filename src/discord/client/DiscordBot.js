@@ -24,16 +24,6 @@ class DiscordBot extends EventEmitter {
         // Handlers
         this.messageHandler = null;
 
-        // Statistics
-        this.stats = {
-            startTime: null,
-            messagesReceived: 0,
-            messagesSent: 0,
-            commandsProcessed: 0,
-            errors: 0,
-            reconnections: 0
-        };
-
         this.initializeClient();
     }
 
@@ -115,7 +105,6 @@ class DiscordBot extends EventEmitter {
 
         // Error event
         this.client.on('error', (error) => {
-            this.stats.errors++;
             logger.logError(error, 'Discord bot error');
             
             this.emit('error', error);
@@ -127,9 +116,7 @@ class DiscordBot extends EventEmitter {
         });
 
         // Message event - handle both regular messages and commands
-        this.client.on('messageCreate', async (message) => {
-            this.stats.messagesReceived++;
-            
+        this.client.on('messageCreate', async (message) => {            
             if (!this._isReady)
                 return;
 
@@ -248,8 +235,6 @@ class DiscordBot extends EventEmitter {
             this.connectionAttempts++;
             logger.discord(`Starting Discord bot (attempt ${this.connectionAttempts}/${this.maxConnectionAttempts})`);
 
-            this.stats.startTime = Date.now();
-
             // Check if client already exists and is connected
             if (this.client && this.client.readyTimestamp) {
                 logger.debug('Discord client appears to be connected already, checking status...');
@@ -349,7 +334,6 @@ class DiscordBot extends EventEmitter {
         
         this.reconnectTimeout = setTimeout(async () => {
             this.reconnectTimeout = null;
-            this.stats.reconnections++;
             
             try {
                 await this.start();
@@ -416,25 +400,6 @@ class DiscordBot extends EventEmitter {
             avatar: this.client.user.displayAvatarURL(),
             verified: this.client.user.verified,
             bot: this.client.user.bot
-        };
-    }
-
-    getStatistics() {
-        const uptime = this.stats.startTime ? Date.now() - this.stats.startTime : 0;
-
-        return {
-            ...this.stats,
-            uptime: uptime,
-            connected: this._isConnected,
-            ready: this._isReady,
-            connectionAttempts: this.connectionAttempts,
-            guilds: this.client ? this.client.guilds.cache.size : 0,
-            users: this.client ? this.client.users.cache.size : 0,
-            channels: this.client ? this.client.channels.cache.size : 0,
-            ping: this.client ? this.client.ws.ping : null,
-            handlers: {
-                messageHandler: !!this.messageHandler
-            }
         };
     }
 

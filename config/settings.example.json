@@ -250,8 +250,7 @@
             "enablePerformanceMonitoring": true,
             "logSlowOperations": true,
             "slowOperationThreshold": 1000,
-            "memoryMonitoring": true,
-            "statisticsInterval": 300000
+            "memoryMonitoring": true
         }
     }
 }

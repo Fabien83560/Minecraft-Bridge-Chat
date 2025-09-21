@@ -486,69 +486,11 @@ class HypixelStrategy {
     }
 
     /**
-     * Get strategy statistics
-     * @returns {object} Strategy statistics
-     */
-    getStatistics() {
-        const stats = {
-            name: this.name,
-            serverName: this.serverName,
-            detectionPatterns: {},
-            cacheSize: this.detectionCache.size
-        };
-
-        const detectionTypes = ['guildChat', 'officerChat', 'guildEvent', 'guildSystem'];
-        
-        detectionTypes.forEach(type => {
-            const patterns = this.getDetectionPatterns(type);
-            stats.detectionPatterns[type] = {
-                count: patterns.length,
-                descriptions: patterns.map(p => p.description).filter(d => d)
-            };
-        });
-
-        return stats;
-    }
-
-    /**
      * Clear detection pattern cache
      */
     clearCache() {
         this.detectionCache.clear();
         logger.debug(`${this.name} detection pattern cache cleared`);
-    }
-
-    /**
-     * Test message against all detection patterns (for debugging)
-     * @param {string} messageText - Message to test
-     * @returns {object} Test results
-     */
-    testMessage(messageText) {
-        const results = {
-            message: messageText,
-            strategy: this.name,
-            serverName: this.serverName,
-            detectionResults: {},
-            guildRelated: false,
-            processedResult: null
-        };
-
-        const detectionTypes = ['guildChat', 'officerChat', 'guildEvent', 'guildSystem'];
-        
-        detectionTypes.forEach(type => {
-            const matches = this.testDetectionPatterns(messageText, type);
-            results.detectionResults[type] = matches;
-            
-            if (matches) {
-                results.guildRelated = true;
-            }
-        });
-
-        if (results.guildRelated) {
-            results.processedResult = this.processGuildMessage(messageText, { name: 'Test' });
-        }
-
-        return results;
     }
 
     wait(ms) {

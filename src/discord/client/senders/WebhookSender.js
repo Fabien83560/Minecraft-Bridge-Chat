@@ -23,14 +23,6 @@ class WebhookSender {
         this.avatarCache = new Map();
         this.avatarCacheTimeout = 5 * 60 * 1000; // 5 minutes
 
-        // Statistics
-        this.stats = {
-            webhooksSent: 0,
-            avatarsCached: 0,
-            avatarRequests: 0,
-            errors: 0
-        };
-
         logger.debug('WebhookSender initialized');
     }
 
@@ -132,15 +124,12 @@ class WebhookSender {
 
             // Send via webhook
             const result = await webhook.send(payload);
-
-            this.stats.webhooksSent++;
             
             logger.debug(`[DISCORD] Sent webhook message to ${channelType} channel as ${payload.username}`);
 
             return result;
 
         } catch (error) {
-            this.stats.errors++;
             logger.logError(error, `Failed to send webhook message to ${channelType} channel`);
             throw error;
         }
@@ -199,8 +188,6 @@ class WebhookSender {
             return this.getDefaultAvatar();
         }
 
-        this.stats.avatarRequests++;
-
         // Check cache first
         const cacheKey = username.toLowerCase();
         const cachedAvatar = this.avatarCache.get(cacheKey);
@@ -217,8 +204,6 @@ class WebhookSender {
             url: avatarUrl,
             timestamp: Date.now()
         });
-        
-        this.stats.avatarsCached++;
 
         return avatarUrl;
     }
@@ -229,46 +214,6 @@ class WebhookSender {
      */
     getDefaultAvatar() {
         return 'https://minotar.net/helm/steve/64.png';
-    }
-
-    /**
-     * Test webhook functionality
-     * @param {string} channelType - Channel type to test
-     * @returns {Promise} Test result
-     */
-    async testWebhook(channelType) {
-        try {
-            const webhook = this.webhooks[channelType];
-            if (!webhook) {
-                return {
-                    success: false,
-                    error: `No webhook configured for ${channelType} channel`
-                };
-            }
-
-            const testPayload = {
-                content: `🧪 Webhook test message for ${channelType} channel`,
-                username: 'TestUser',
-                avatarURL: this.getDefaultAvatar()
-            };
-
-            const result = await webhook.send(testPayload);
-
-            return {
-                success: true,
-                message: 'Webhook test successful',
-                messageId: result.id,
-                channelType: channelType
-            };
-
-        } catch (error) {
-            logger.logError(error, `Webhook test failed for ${channelType} channel`);
-            return {
-                success: false,
-                error: error.message,
-                channelType: channelType
-            };
-        }
     }
 
     /**
@@ -288,23 +233,6 @@ class WebhookSender {
         if (cleaned > 0) {
             logger.debug(`Cleaned up ${cleaned} expired avatar cache entries`);
         }
-    }
-
-    /**
-     * Get webhook statistics
-     * @returns {object} Webhook statistics
-     */
-    getStatistics() {
-        return {
-            ...this.stats,
-            webhooksConfigured: {
-                chat: !!this.webhooks.chat,
-                staff: !!this.webhooks.staff
-            },
-            avatarCacheSize: this.avatarCache.size,
-            avatarCacheHitRate: this.stats.avatarRequests > 0 ? 
-                ((this.stats.avatarRequests - this.stats.avatarsCached) / this.stats.avatarRequests * 100).toFixed(2) + '%' : '0%'
-        };
     }
 
     /**

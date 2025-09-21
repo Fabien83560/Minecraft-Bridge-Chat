@@ -384,72 +384,6 @@ class DiscordManager extends EventEmitter {
     }
 
     /**
-     * Test Discord message sending
-     * @param {object} testData - Test data
-     * @returns {Promise} Test result
-     */
-    async testMessageSending(testData = {}) {
-        if (!this._isStarted || !this._messageSender) {
-            return { error: 'Discord not started' };
-        }
-
-        const defaultTestData = {
-            username: 'TestUser',
-            message: 'Test message from Discord system',
-            chatType: 'guild',
-            type: 'guild_chat'
-        };
-
-        const mergedTestData = { ...defaultTestData, ...testData };
-
-        try {
-            const testGuildConfig = this.config.getEnabledGuilds()[0];
-            if (!testGuildConfig) {
-                return { error: 'No guild config found for testing' };
-            }
-
-            const result = await this.sendGuildMessage(mergedTestData, testGuildConfig);
-            
-            return {
-                success: true,
-                message: 'Test message sent successfully',
-                result: result
-            };
-
-        } catch (error) {
-            logger.logError(error, 'Discord test message failed');
-            return {
-                success: false,
-                error: error.message
-            };
-        }
-    }
-
-    /**
-     * Get Discord statistics
-     * @returns {object} Discord statistics
-     */
-    getStatistics() {
-        const stats = {
-            isInitialized: this._isInitialized,
-            isStarted: this._isStarted,
-            connected: this.isConnected(),
-            bot: null,
-            messageSender: null
-        };
-
-        if (this._discordBot) {
-            stats.bot = this._discordBot.getStatistics();
-        }
-
-        if (this._messageSender) {
-            stats.messageSender = this._messageSender.getStatistics();
-        }
-
-        return stats;
-    }
-
-    /**
      * Update Discord configuration
      * @param {object} newConfig - New configuration
      */
@@ -458,24 +392,6 @@ class DiscordManager extends EventEmitter {
         logger.warn('Discord configuration update requires restart');
         // For now, just log the request
         logger.debug('Discord config update requested:', newConfig);
-    }
-
-    /**
-     * Get debugging information
-     */
-    getDebugInfo() {
-        return {
-            isInitialized: this._isInitialized,
-            isStarted: this._isStarted,
-            isConnected: this.isConnected(),
-            hasBotInstance: !!this._discordBot,
-            hasMessageSender: !!this._messageSender,
-            messageHandlers: this.messageHandlers.length,
-            connectionHandlers: this.connectionHandlers.length,
-            errorHandlers: this.errorHandlers.length,
-            botInfo: this.getBotInfo(),
-            connectionStatus: this.getConnectionStatus()
-        };
     }
 }
 

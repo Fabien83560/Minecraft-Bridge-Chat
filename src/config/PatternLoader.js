@@ -272,114 +272,11 @@ class PatternLoader {
     }
 
     /**
-     * Reload patterns from file
-     */
-    reload() {
-        logger.info('Reloading pattern configuration...');
-        this.cache.clear();
-        this.isLoaded = false;
-        this.patterns = null;
-        
-        this.load();
-    }
-
-    /**
-     * Get pattern statistics
-     * @returns {object} Statistics about loaded patterns
-     */
-    getStatistics() {
-        if (!this.isLoaded) {
-            return { loaded: false };
-        }
-
-        const stats = {
-            loaded: true,
-            servers: Object.keys(this.patterns.servers).length,
-            cacheSize: this.cache.size,
-            patterns: {}
-        };
-
-        for (const [serverName, serverConfig] of Object.entries(this.patterns.servers)) {
-            stats.patterns[serverName] = {
-                events: 0,
-                messages: 0,
-                system: 0,
-                ignore: 0,
-                detection: 0
-            };
-
-            if (serverConfig.events) {
-                stats.patterns[serverName].events = Object.values(serverConfig.events)
-                    .reduce((total, patterns) => total + (Array.isArray(patterns) ? patterns.length : 0), 0);
-            }
-
-            if (serverConfig.messages) {
-                stats.patterns[serverName].messages = Object.values(serverConfig.messages)
-                    .reduce((total, patterns) => total + (Array.isArray(patterns) ? patterns.length : 0), 0);
-            }
-
-            if (serverConfig.system && Array.isArray(serverConfig.system)) {
-                stats.patterns[serverName].system = serverConfig.system.length;
-            }
-
-            if (serverConfig.ignore && Array.isArray(serverConfig.ignore)) {
-                stats.patterns[serverName].ignore = serverConfig.ignore.length;
-            }
-
-            if (serverConfig.detection) {
-                stats.patterns[serverName].detection = Object.values(serverConfig.detection)
-                    .reduce((total, patterns) => total + (Array.isArray(patterns) ? patterns.length : 0), 0);
-            }
-        }
-
-        return stats;
-    }
-
-    /**
      * Clear pattern cache
      */
     clearCache() {
         this.cache.clear();
         logger.debug('Pattern cache cleared');
-    }
-
-    /**
-     * Test pattern matching for debugging
-     * @param {string} serverName - Server name
-     * @param {string} category - Pattern category
-     * @param {string} subCategory - Sub-category
-     * @param {string} testMessage - Message to test
-     * @returns {object} Test results
-     */
-    testPatterns(serverName, category, subCategory, testMessage) {
-        const patterns = this.getPatterns(serverName, category, subCategory);
-        const results = {
-            server: serverName,
-            category: category,
-            subCategory: subCategory,
-            testMessage: testMessage,
-            matches: [],
-            patternsTested: patterns.length
-        };
-
-        for (let i = 0; i < patterns.length; i++) {
-            const patternObj = patterns[i];
-            if (!patternObj || !patternObj.pattern) continue;
-
-            const match = testMessage.match(patternObj.pattern);
-            if (match) {
-                results.matches.push({
-                    patternIndex: i,
-                    pattern: patternObj.originalPattern,
-                    description: patternObj.description,
-                    groups: patternObj.groups,
-                    matchedGroups: match.slice(1),
-                    fullMatch: match[0]
-                });
-            }
-        }
-
-        return results;
     }
 }
 

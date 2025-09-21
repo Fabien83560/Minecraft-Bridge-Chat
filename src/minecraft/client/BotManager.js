@@ -380,28 +380,11 @@ class BotManager extends EventEmitter {
         return connectedGuilds;
     }
 
-    // Inter-guild manager methods
-    getInterGuildStats() {
-        if (!this.interGuildManager) {
-            return null;
-        }
-
-        return this.interGuildManager.getStatistics();
-    }
-
     updateInterGuildConfig(newConfig) {
         if (this.interGuildManager) {
             this.interGuildManager.updateConfig(newConfig);
             logger.info('Inter-guild configuration updated via BotManager');
         }
-    }
-
-    testInterGuildFormatting(testData) {
-        if (!this.interGuildManager) {
-            return { error: 'InterGuildManager not available' };
-        }
-
-        return this.interGuildManager.testMessageFormatting(testData);
     }
 
     clearInterGuildCache() {

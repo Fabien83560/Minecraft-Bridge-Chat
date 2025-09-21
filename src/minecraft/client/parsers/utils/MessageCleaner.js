@@ -504,59 +504,6 @@ class MessageCleaner {
     getConfig() {
         return { ...this.config };
     }
-
-    /**
-     * Test message cleaning (for debugging)
-     * @param {string} text - Text to test
-     * @returns {object} Test results showing each cleaning step
-     */
-    testCleaning(text) {
-        const steps = {
-            original: text,
-            extracted: this.extractMessageText(text),
-            colorCodesRemoved: null,
-            controlCharsRemoved: null,
-            charactersNormalized: null,
-            urlsRemoved: null,
-            whitespaceNormalized: null,
-            truncated: null,
-            final: null
-        };
-
-        let current = steps.extracted;
-        
-        current = this.removeMinecraftColorCodes(current);
-        steps.colorCodesRemoved = current;
-        
-        current = this.removeControlCharacters(current);
-        steps.controlCharsRemoved = current;
-        
-        current = this.normalizeCharacters(current);
-        steps.charactersNormalized = current;
-        
-        if (this.config.stripUrls) {
-            current = this.removeUrls(current);
-            steps.urlsRemoved = current;
-        }
-        
-        if (this.config.normalizeWhitespace) {
-            current = this.normalizeWhitespace(current);
-            steps.whitespaceNormalized = current;
-        }
-        
-        current = this.truncateMessage(current);
-        steps.truncated = current;
-        
-        steps.final = current.trim();
-        
-        return {
-            steps: steps,
-            hasColorCodes: this.hasColorCodes(text),
-            cleanLength: this.getCleanLength(text),
-            finalLength: steps.final.length,
-            changesMade: steps.original !== steps.final
-        };
-    }
 }
 
 module.exports = MessageCleaner;

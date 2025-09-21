@@ -474,49 +474,6 @@ class MessageFormatter {
         this.formatCache.clear();
         logger.debug('MessageFormatter cache cleared');
     }
-
-    /**
-     * Get formatter statistics
-     * @returns {object} Formatter statistics
-     */
-    getStatistics() {
-        return {
-            cacheSize: this.formatCache.size,
-            cacheMaxSize: this.cacheMaxSize,
-            config: this.getConfig(),
-            templateStats: this.templateLoader.getStatistics()
-        };
-    }
-
-    /**
-     * Test message formatting (for debugging)
-     * @param {string} platform - Target platform
-     * @param {string} serverName - Server name
-     * @param {string} category - Template category
-     * @param {object} testData - Test data
-     * @returns {object} Test results
-     */
-    testFormatting(platform, serverName, category, testData = {}) {
-        const template = this.templateLoader.getBestTemplate(platform, serverName, category, this.config);
-        
-        // Create test variables
-        const defaults = this.templateLoader.getDefaults('placeholders');
-        const testVariables = { ...defaults, ...testData };
-        
-        const templateTest = this.templateLoader.testTemplate(template, testVariables);
-        
-        return {
-            platform: platform,
-            serverName: serverName,
-            category: category,
-            template: template,
-            config: this.config,
-            templateTest: templateTest,
-            finalResult: templateTest.valid ? 
-                this.postProcessMessage(templateTest.result, platform) : 
-                null
-        };
-    }
 }
 
 module.exports = MessageFormatter;

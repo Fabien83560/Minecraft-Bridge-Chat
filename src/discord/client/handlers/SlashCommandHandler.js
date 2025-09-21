@@ -1,12 +1,12 @@
 // Globals Imports
-const { Collection, Events, REST, Routes } = require('discord.js');
 const { readdirSync, statSync } = require('fs');
 const { join } = require('path');
-const EventEmitter = require('events');
+const { REST, Routes, Events } = require('discord.js');
+const { EventEmitter } = require('events');
 
 // Specific Imports
-const BridgeLocator = require("../../../bridgeLocator.js");
-const logger = require("../../../shared/logger");
+const logger = require('../../../shared/logger');
+const BridgeLocator = require('../../../bridgeLocator.js');
 
 class SlashCommandHandler extends EventEmitter {
     constructor() {
@@ -16,25 +16,22 @@ class SlashCommandHandler extends EventEmitter {
         this.config = mainBridge.config;
 
         this.client = null;
-        this.commands = new Collection();
+        this.commands = new Map();
         this.commandsData = [];
+                
+        // Statistics
+        this.commandsLoaded = 0;
+
         
         // Admin and mod roles for permission checking
         this.adminRoles = this.config.get('bridge.adminRoles') || [];
         this.modRoles = this.config.get('bridge.modRoles') || [];
-        
-        // Statistics
-        this.stats = {
-            commandsLoaded: 0,
-            commandsExecuted: 0,
-            errors: 0
-        };
 
         logger.debug('SlashCommandHandler initialized');
     }
 
     /**
-     * Initialize with Discord client
+     * Initialize the slash command handler
      * @param {Client} client - Discord client instance
      */
     async initialize(client) {
@@ -45,13 +42,15 @@ class SlashCommandHandler extends EventEmitter {
         this.client = client;
 
         try {
-            // Load all commands from the commands directory and subdirectories
+            logger.debug('Initializing SlashCommandHandler...');
+
+            // Load all commands
             await this.loadCommands();
-            
-            // Register slash commands with Discord
+
+            // Register commands with Discord
             await this.registerCommands();
-            
-            // Setup interaction listener
+
+            // Setup event listeners
             this.setupInteractionListener();
 
             logger.discord(`SlashCommandHandler initialized with ${this.commands.size} commands`);
@@ -70,7 +69,7 @@ class SlashCommandHandler extends EventEmitter {
         
         try {
             await this.loadCommandsFromDirectory(commandsPath);
-            logger.discord(`Loaded ${this.stats.commandsLoaded} slash commands`);
+            logger.discord(`Loaded ${this.commandsLoaded} slash commands`);
 
         } catch (error) {
             if (error.code === 'ENOENT') {
@@ -135,7 +134,7 @@ class SlashCommandHandler extends EventEmitter {
             this.commands.set(command.data.name, command);
             this.commandsData.push(command.data.toJSON());
             
-            this.stats.commandsLoaded++;
+            this.commandsLoaded++;
             logger.discord(`Loaded slash command: ${command.data.name} from ${fileName}`);
             
         } catch (error) {
@@ -177,11 +176,19 @@ class SlashCommandHandler extends EventEmitter {
     }
 
     /**
-     * Setup interaction listener for slash commands
+     * Setup interaction listener for slash commands and autocomplete
      */
     setupInteractionListener() {
         this.client.on(Events.InteractionCreate, async (interaction) => {
-            if (!interaction.isChatInputCommand()) return;
+            // Handle autocomplete interactions
+            if (interaction.isAutocomplete()) {
+                await this.handleAutocomplete(interaction);
+                return;
+            }
+
+            // Handle slash command interactions
+            if (!interaction.isChatInputCommand())
+                return;
 
             const command = this.commands.get(interaction.commandName);
 
@@ -191,8 +198,6 @@ class SlashCommandHandler extends EventEmitter {
             }
 
             try {
-                this.stats.commandsExecuted++;
-
                 // Check permissions if required
                 if (command.permission && !this.hasPermission(interaction.member, command.permission)) {
                     await interaction.reply({
@@ -212,7 +217,6 @@ class SlashCommandHandler extends EventEmitter {
                 logger.discord(`Executed slash command: ${interaction.commandName} by ${interaction.user.displayName}`);
 
             } catch (error) {
-                this.stats.errors++;
                 logger.logError(error, `Error executing slash command: ${interaction.commandName}`);
 
                 const errorMessage = 'There was an error while executing this command!';
@@ -228,6 +232,97 @@ class SlashCommandHandler extends EventEmitter {
                 }
             }
         });
+    }
+
+    /**
+     * Handle autocomplete interactions
+     * @param {AutocompleteInteraction} interaction - Discord autocomplete interaction
+     */
+    async handleAutocomplete(interaction) {
+        try {
+            const command = this.commands.get(interaction.commandName);
+            if (!command) {
+                logger.warn(`No command matching ${interaction.commandName} found for autocomplete`);
+                return;
+            }
+
+            const focusedOption = interaction.options.getFocused(true);
+
+            // Handle guild name autocomplete
+            if (focusedOption.name === 'guildname') {
+                await this.handleGuildNameAutocomplete(interaction, focusedOption.value);
+                return;
+            }
+
+            // If command has custom autocomplete handler
+            if (command.autocomplete) {
+                await command.autocomplete(interaction);
+                return;
+            }
+
+            // Default empty response if no handler found
+            await interaction.respond([]);
+
+        } catch (error) {
+            logger.logError(error, `Error handling autocomplete for ${interaction.commandName}`);
+            
+            try {
+                await interaction.respond([]);
+            } catch (respondError) {
+                logger.logError(respondError, 'Failed to respond to autocomplete interaction');
+            }
+        }
+    }
+
+    /**
+     * Handle guild name autocomplete
+     * @param {AutocompleteInteraction} interaction - Discord autocomplete interaction
+     * @param {string} query - Current input value
+     */
+    async handleGuildNameAutocomplete(interaction, query) {
+        try {
+            const enabledGuilds = this.config.getEnabledGuilds() || [];
+            
+            if (enabledGuilds.length === 0) {
+                await interaction.respond([{
+                    name: 'No guilds available',
+                    value: 'none'
+                }]);
+                return;
+            }
+
+            // Filter guilds based on query (case insensitive)
+            const filteredGuilds = enabledGuilds.filter(guild => 
+                guild.name && guild.name.toLowerCase().includes(query.toLowerCase())
+            );
+
+            // Create choices array (Discord limit: 25 choices max)
+            const choices = filteredGuilds
+                .slice(0, 25)
+                .map(guild => ({
+                    name: `${guild.name}`,
+                    value: guild.name
+                }));
+
+            // If no matches and query is not empty, suggest closest matches
+            if (choices.length === 0 && query.length > 0) {
+                const allGuildChoices = enabledGuilds
+                    .slice(0, 25)
+                    .map(guild => ({
+                        name: `${guild.name} (available)`,
+                        value: guild.name
+                    }));
+                
+                await interaction.respond(allGuildChoices);
+                return;
+            }
+
+            await interaction.respond(choices);
+
+        } catch (error) {
+            logger.logError(error, 'Error generating guild name autocomplete');
+            await interaction.respond([]);
+        }
     }
 
     /**
@@ -264,7 +359,7 @@ class SlashCommandHandler extends EventEmitter {
         try {
             this.commands.clear();
             this.commandsData = [];
-            this.stats.commandsLoaded = 0;
+            this.commandsLoaded = 0;
 
             await this.loadCommands();
             await this.registerCommands();
@@ -276,17 +371,6 @@ class SlashCommandHandler extends EventEmitter {
             logger.logError(error, 'Failed to reload slash commands');
             return { success: false, error: error.message };
         }
-    }
-
-    /**
-     * Get statistics
-     * @returns {object} Handler statistics
-     */
-    getStatistics() {
-        return {
-            ...this.stats,
-            commandsRegistered: this.commands.size
-        };
     }
 
     /**

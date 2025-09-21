@@ -117,7 +117,8 @@ module.exports = {
                 .addStringOption(option =>
                     option.setName('guildname')
                         .setDescription('Name of the guild to invite to')
-                        .setRequired(true))
+                        .setRequired(true)
+                        .setAutocomplete(true))
                 .addStringOption(option =>
                     option.setName('username')
                         .setDescription('Username of the player to invite')
@@ -129,7 +130,8 @@ module.exports = {
                 .addStringOption(option =>
                     option.setName('guildname')
                         .setDescription('Name of the guild to kick from')
-                        .setRequired(true))
+                        .setRequired(true)
+                        .setAutocomplete(true))
                 .addStringOption(option =>
                     option.setName('username')
                         .setDescription('Username of the player to kick')

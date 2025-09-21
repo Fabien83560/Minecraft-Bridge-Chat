@@ -5,7 +5,6 @@ const EventEmitter = require('events');
 // Specific Imports
 const BridgeLocator = require("../../bridgeLocator.js");
 const MessageHandler = require("./handlers/MessageHandler.js");
-const CommandHandler = require("./handlers/CommandHandler.js");
 const logger = require("../../shared/logger");
 
 class DiscordBot extends EventEmitter {
@@ -24,7 +23,6 @@ class DiscordBot extends EventEmitter {
 
         // Handlers
         this.messageHandler = null;
-        this.commandHandler = null;
 
         // Statistics
         this.stats = {
@@ -53,7 +51,6 @@ class DiscordBot extends EventEmitter {
 
             // Initialize handlers (but don't initialize them with client yet)
             this.messageHandler = new MessageHandler();
-            this.commandHandler = new CommandHandler();
 
             this.setupEventHandlers();
             
@@ -133,23 +130,12 @@ class DiscordBot extends EventEmitter {
         this.client.on('messageCreate', async (message) => {
             this.stats.messagesReceived++;
             
-            if (!this._isReady) return;
+            if (!this._isReady)
+                return;
 
-            // Check if message is a command
-            const commandPrefix = this.config.get('bridge.commandPrefix') || '!';
-            
-            if (message.content.startsWith(commandPrefix)) {
-                // Handle command
-                if (this.commandHandler) {
-                    const commandString = message.content.substring(commandPrefix.length).trim();
-                    await this.commandHandler.processCommand(message, commandString);
-                    this.stats.commandsProcessed++;
-                }
-            } else {
-                // Handle regular message
-                if (this.messageHandler) {
-                    await this.messageHandler.handleMessage(message);
-                }
+            // Handle regular message
+            if (this.messageHandler) {
+                await this.messageHandler.handleMessage(message);
             }
         });
 
@@ -217,12 +203,6 @@ class DiscordBot extends EventEmitter {
                 this.setupMessageHandlerEvents();
                 
                 logger.debug('Message handler initialized and events setup');
-            }
-
-            // Initialize command handler
-            if (this.commandHandler) {
-                await this.commandHandler.initialize(this.client);
-                logger.debug('Command handler initialized');
             }
 
             logger.debug('All Discord bot handlers initialized');
@@ -334,10 +314,6 @@ class DiscordBot extends EventEmitter {
             // Cleanup handlers
             if (this.messageHandler) {
                 this.messageHandler.cleanup();
-            }
-
-            if (this.commandHandler) {
-                this.commandHandler.cleanup();
             }
 
             // Destroy Discord client
@@ -457,8 +433,7 @@ class DiscordBot extends EventEmitter {
             channels: this.client ? this.client.channels.cache.size : 0,
             ping: this.client ? this.client.ws.ping : null,
             handlers: {
-                messageHandler: !!this.messageHandler,
-                commandHandler: !!this.commandHandler
+                messageHandler: !!this.messageHandler
             }
         };
     }

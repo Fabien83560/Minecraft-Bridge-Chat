@@ -36,11 +36,6 @@
                     "retryDelay": 30000,
                     "exponentialBackoff": true
                 }
-            },
-            "commands": {
-                "prefix": "/g",
-                "allowedCommands": ["gc", "oc", "invite", "kick", "promote", "demote"],
-                "cooldown": 5000
             }
         },
         {
@@ -72,11 +67,6 @@
                     "retryDelay": 30000,
                     "exponentialBackoff": true
                 }
-            },
-            "commands": {
-                "prefix": "/g",
-                "allowedCommands": ["gc", "oc", "invite", "kick", "promote", "demote"],
-                "cooldown": 5000
             }
         }
     ],

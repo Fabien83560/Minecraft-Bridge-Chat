@@ -6,6 +6,7 @@ const EventEmitter = require('events');
 const BridgeLocator = require("../../bridgeLocator.js");
 const MessageHandler = require("./handlers/MessageHandler.js");
 const CommandHandler = require("./handlers/CommandHandler.js");
+const SlashCommandHandler = require("./handlers/SlashCommandHandler.js");
 const logger = require("../../shared/logger");
 
 class DiscordBot extends EventEmitter {
@@ -25,6 +26,7 @@ class DiscordBot extends EventEmitter {
         // Handlers
         this.messageHandler = null;
         this.commandHandler = null;
+        this.slashCommandHandler = null;
 
         // Statistics
         this.stats = {
@@ -32,6 +34,7 @@ class DiscordBot extends EventEmitter {
             messagesReceived: 0,
             messagesSent: 0,
             commandsProcessed: 0,
+            slashCommandsProcessed: 0,
             errors: 0,
             reconnections: 0
         };
@@ -54,6 +57,7 @@ class DiscordBot extends EventEmitter {
             // Initialize handlers (but don't initialize them with client yet)
             this.messageHandler = new MessageHandler();
             this.commandHandler = new CommandHandler();
+            this.slashCommandHandler = new SlashCommandHandler();
 
             this.setupEventHandlers();
             
@@ -205,7 +209,26 @@ class DiscordBot extends EventEmitter {
     }
 
     /**
-     * Update initializeHandlers method
+     * Setup slash command handler event forwarding
+     */
+    setupSlashCommandHandlerEvents() {
+        if (!this.slashCommandHandler) {
+            logger.warn('SlashCommandHandler not available for event setup');
+            return;
+        }
+
+        // Forward slash command events
+        this.slashCommandHandler.on('slashCommand', (commandData) => {
+            logger.debug(`[DISCORD-BOT] Slash command event: ${JSON.stringify(commandData)}`);
+            this.emit('slashCommand', commandData);
+            this.stats.slashCommandsProcessed++;
+        });
+
+        logger.debug('DiscordBot slash command handler events setup completed');
+    }
+
+    /**
+     * Initialize all handlers with Discord client
      */
     async initializeHandlers() {
         try {
@@ -223,6 +246,16 @@ class DiscordBot extends EventEmitter {
             if (this.commandHandler) {
                 await this.commandHandler.initialize(this.client);
                 logger.debug('Command handler initialized');
+            }
+
+            // Initialize slash command handler
+            if (this.slashCommandHandler) {
+                await this.slashCommandHandler.initialize(this.client);
+                
+                // Set up slash command handler event forwarding
+                this.setupSlashCommandHandlerEvents();
+                
+                logger.debug('Slash command handler initialized and events setup');
             }
 
             logger.debug('All Discord bot handlers initialized');
@@ -270,58 +303,75 @@ class DiscordBot extends EventEmitter {
 
             this.stats.startTime = Date.now();
 
-            // Check if client already exists and is connected
-            if (this.client && this.client.readyTimestamp) {
-                logger.debug('Discord client appears to be connected already, checking status...');
-                
-                // Test if client is actually working
-                try {
-                    await this.client.user.fetch();
-                    this._isConnected = true;
-                    this._isReady = true;
-                    logger.discord('✅ Discord bot was already connected and working');
-                    return;
-                } catch (error) {
-                    logger.debug('Existing client not working, will reconnect');
-                    // Destroy the existing client
-                    this.client.destroy();
-                    this.client = null;
-                }
-            }
-
-            // Create fresh client if needed
-            if (!this.client) {
-                this.initializeClient();
-            }
-
             // Login to Discord
             await this.client.login(token);
 
-            // Wait for ready event with timeout
-            await this.waitForReady(30000); // 30 second timeout
+            // Wait for ready event
+            await this.waitForReady();
 
             logger.discord('✅ Discord bot started successfully');
 
         } catch (error) {
-            logger.logError(error, `Failed to start Discord bot (attempt ${this.connectionAttempts}/${this.maxConnectionAttempts})`);
-            
+            this.stats.errors++;
+            logger.logError(error, 'Failed to start Discord bot');
+
             if (this.connectionAttempts < this.maxConnectionAttempts) {
                 this.scheduleReconnection();
-            } else {
-                logger.error('Max connection attempts reached. Discord bot startup failed.');
-                this.emit('error', new Error('Max connection attempts reached'));
             }
-            
+
             throw error;
         }
     }
 
-    async stop() {
-        if (!this._isConnected && !this.client) {
-            logger.debug('Discord bot not connected, nothing to stop');
-            return;
+    async waitForReady() {
+        return new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => {
+                reject(new Error('Discord bot ready timeout'));
+            }, 30000); // 30 second timeout
+
+            const onReady = () => {
+                clearTimeout(timeout);
+                this.client.off('error', onError);
+                resolve();
+            };
+
+            const onError = (error) => {
+                clearTimeout(timeout);
+                this.client.off('ready', onReady);
+                reject(error);
+            };
+
+            if (this._isReady) {
+                clearTimeout(timeout);
+                resolve();
+                return;
+            }
+
+            this.client.once('ready', onReady);
+            this.client.once('error', onError);
+        });
+    }
+
+    scheduleReconnection() {
+        if (this.reconnectTimeout) {
+            clearTimeout(this.reconnectTimeout);
         }
 
+        const delay = Math.min(5000 * Math.pow(2, this.connectionAttempts - 1), 300000); // Exponential backoff, max 5 minutes
+        
+        logger.discord(`Scheduling reconnection in ${delay / 1000} seconds...`);
+
+        this.reconnectTimeout = setTimeout(async () => {
+            try {
+                this.stats.reconnections++;
+                await this.start();
+            } catch (error) {
+                logger.logError(error, 'Reconnection attempt failed');
+            }
+        }, delay);
+    }
+
+    async stop() {
         try {
             logger.discord('Stopping Discord bot...');
 
@@ -331,23 +381,26 @@ class DiscordBot extends EventEmitter {
                 this.reconnectTimeout = null;
             }
 
+            // Reset states
+            this._isConnected = false;
+            this._isReady = false;
+
             // Cleanup handlers
             if (this.messageHandler) {
                 this.messageHandler.cleanup();
             }
-
             if (this.commandHandler) {
                 this.commandHandler.cleanup();
+            }
+            if (this.slashCommandHandler) {
+                this.slashCommandHandler.cleanup();
             }
 
             // Destroy Discord client
             if (this.client) {
-                this.client.destroy();
+                await this.client.destroy();
+                this.client = null;
             }
-
-            this._isConnected = false;
-            this._isReady = false;
-            this.connectionAttempts = 0;
 
             logger.discord('✅ Discord bot stopped');
 
@@ -357,94 +410,49 @@ class DiscordBot extends EventEmitter {
         }
     }
 
-    scheduleReconnection() {
-        if (this.reconnectTimeout) {
-            return; // Reconnection already scheduled
-        }
-
-        if (this.connectionAttempts >= this.maxConnectionAttempts) {
-            logger.error('Max reconnection attempts reached. Giving up.');
-            return;
-        }
-
-        const delay = Math.min(5000 * this.connectionAttempts, 30000); // Exponential backoff, max 30s
-        
-        logger.discord(`Scheduling Discord reconnection in ${delay}ms (attempt ${this.connectionAttempts + 1}/${this.maxConnectionAttempts})`);
-        
-        this.reconnectTimeout = setTimeout(async () => {
-            this.reconnectTimeout = null;
-            this.stats.reconnections++;
-            
-            try {
-                await this.start();
-            } catch (error) {
-                logger.logError(error, 'Reconnection failed');
-            }
-        }, delay);
+    isConnected() {
+        return this._isConnected;
     }
 
-    waitForReady(timeout = 10000) {
-        return new Promise((resolve, reject) => {
-            if (this._isReady) {
-                resolve();
-                return;
-            }
-
-            const timeoutHandle = setTimeout(() => {
-                reject(new Error('Discord bot ready timeout'));
-            }, timeout);
-
-            this.client.once('ready', () => {
-                clearTimeout(timeoutHandle);
-                resolve();
-            });
-
-            this.client.once('error', (error) => {
-                clearTimeout(timeoutHandle);
-                reject(error);
-            });
-        });
+    isReady() {
+        return this._isReady;
     }
-
-    // ==================== GETTER METHODS ====================
 
     getClient() {
         return this.client;
-    }
-
-    isConnected() {
-        return this._isConnected && this._isReady;
     }
 
     getConnectionStatus() {
         return {
             connected: this._isConnected,
             ready: this._isReady,
-            attempts: this.connectionAttempts,
-            maxAttempts: this.maxConnectionAttempts,
+            connectionAttempts: this.connectionAttempts,
             guilds: this.client ? this.client.guilds.cache.size : 0,
-            users: this.client ? this.client.users.cache.size : 0
+            ping: this.client ? this.client.ws.ping : null
         };
     }
 
-    getBotInfo() {
-        if (!this.client || !this.client.user) {
-            return null;
+    /**
+     * Reload slash commands
+     */
+    async reloadSlashCommands() {
+        if (!this.slashCommandHandler) {
+            throw new Error('SlashCommandHandler not available');
         }
 
-        return {
-            username: this.client.user.username,
-            id: this.client.user.id,
-            discriminator: this.client.user.discriminator,
-            tag: this.client.user.tag,
-            avatar: this.client.user.displayAvatarURL(),
-            verified: this.client.user.verified,
-            bot: this.client.user.bot
-        };
+        try {
+            const result = await this.slashCommandHandler.reloadCommands();
+            logger.discord(`Slash commands reloaded: ${result.success ? 'success' : 'failed'}`);
+            return result;
+        } catch (error) {
+            logger.logError(error, 'Failed to reload slash commands');
+            throw error;
+        }
     }
 
     getStatistics() {
-        const uptime = this.stats.startTime ? Date.now() - this.stats.startTime : 0;
+        const uptime = this.stats.startTime ? 
+            Date.now() - this.stats.startTime : 0;
 
         return {
             ...this.stats,
@@ -458,7 +466,8 @@ class DiscordBot extends EventEmitter {
             ping: this.client ? this.client.ws.ping : null,
             handlers: {
                 messageHandler: !!this.messageHandler,
-                commandHandler: !!this.commandHandler
+                commandHandler: !!this.commandHandler,
+                slashCommandHandler: !!this.slashCommandHandler
             }
         };
     }
@@ -471,6 +480,10 @@ class DiscordBot extends EventEmitter {
 
     onCommand(callback) {
         this.on('command', callback);
+    }
+
+    onSlashCommand(callback) {
+        this.on('slashCommand', callback);
     }
 
     onConnection(callback) {

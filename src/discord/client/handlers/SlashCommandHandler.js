@@ -136,7 +136,7 @@ class SlashCommandHandler extends EventEmitter {
             this.commandsData.push(command.data.toJSON());
             
             this.stats.commandsLoaded++;
-            logger.debug(`Loaded slash command: ${command.data.name} from ${fileName}`);
+            logger.discord(`Loaded slash command: ${command.data.name} from ${fileName}`);
             
         } catch (error) {
             logger.logError(error, `Failed to load command file: ${fileName}`);

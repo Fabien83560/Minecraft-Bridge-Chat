@@ -80,7 +80,7 @@ async function handleKickCommand(interaction, context) {
 
         // Set up command response listener
         const responseListener = getCommandResponseListener();
-        const listenerId = responseListener.createListener(guildConfig.id, 'kick', username, 15000); // 15 second timeout
+        const listenerId = responseListener.createListener(guildConfig.id, 'kick', username, 15000, interaction);
 
         // Send initial response
         const initialEmbed = new EmbedBuilder()

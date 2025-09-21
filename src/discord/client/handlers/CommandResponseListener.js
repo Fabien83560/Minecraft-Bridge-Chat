@@ -83,9 +83,10 @@ class CommandResponseListener extends EventEmitter {
      * @param {string} commandType - Type of command (invite, kick, etc.)
      * @param {string} targetPlayer - Player being targeted by the command
      * @param {number} timeoutMs - Timeout in milliseconds (default: 10000)
+     * @param {object} interaction - Discord interaction object (optional)
      * @returns {string} Listener ID
      */
-    createListener(guildId, commandType, targetPlayer, timeoutMs = 10000) {
+    createListener(guildId, commandType, targetPlayer, timeoutMs = 10000, interaction = null) {
         const listenerId = `cmd_${++this.listenerCounter}_${Date.now()}`;
         
         const listener = {
@@ -98,7 +99,8 @@ class CommandResponseListener extends EventEmitter {
             resolved: false,
             messageHandler: null,
             eventHandler: null,
-            rawMessageHandler: null
+            rawMessageHandler: null,
+            interaction: interaction
         };
 
         // Set up timeout
@@ -434,6 +436,11 @@ class CommandResponseListener extends EventEmitter {
             clearTimeout(listener.timeout);
         }
 
+        // Send command log to Discord if successful
+        if (result.success) {
+            this.sendCommandLog(listener, result);
+        }
+
         // Remove message handlers
         try {
             const mainBridge = BridgeLocator.getInstance();
@@ -476,6 +483,142 @@ class CommandResponseListener extends EventEmitter {
         });
 
         logger.debug(`Resolved listener ${listenerId} with result: ${JSON.stringify(result)}`);
+    }
+
+    /**
+     * Send command log to Discord channel
+     * @param {object} listener - Listener configuration
+     * @param {object} result - Command result
+     */
+    async sendCommandLog(listener, result) {
+        try {
+            const mainBridge = BridgeLocator.getInstance();
+            const discordManager = mainBridge.getDiscordManager?.();
+            
+            if (!discordManager || !discordManager.isConnected()) {
+                logger.debug('Discord manager not available for command logging');
+                return;
+            }
+
+            // Get Discord bot client
+            const client = discordManager._discordBot?.getClient();
+            if (!client) {
+                logger.debug('Discord client not available for command logging');
+                return;
+            }
+
+            // Get log channels configuration
+            const config = mainBridge.config;
+            const logChannels = config.get('discord.logChannels');
+            if (!logChannels) {
+                logger.debug('No log channels configured');
+                return;
+            }
+
+            // Determine which channel to use
+            const commandChannelId = logChannels[listener.commandType];
+            const channelId = commandChannelId && commandChannelId.trim() !== '' 
+                ? commandChannelId 
+                : logChannels.default;
+
+            if (!channelId || channelId.trim() === '') {
+                logger.debug(`No log channel configured for command type: ${listener.commandType}`);
+                return;
+            }
+
+            // Get the channel
+            const channel = await client.channels.fetch(channelId).catch(() => null);
+            if (!channel) {
+                logger.warn(`Could not find Discord log channel: ${channelId}`);
+                return;
+            }
+
+            // Get guild name for the log
+            const guilds = config.get('guilds') || [];
+            const guildConfig = guilds.find(g => g.id === listener.guildId);
+            const guildName = guildConfig ? guildConfig.name : listener.guildId;
+
+            // Create embed for the log
+            const { EmbedBuilder } = require('discord.js');
+            const embed = new EmbedBuilder()
+                .setTitle(`${this.capitalizeFirst(listener.commandType)} Command Executed`)
+                .setColor(0x00FF00) // Green for success
+                .addFields(
+                    { name: 'Guild', value: guildName, inline: true },
+                    { name: 'Target Player', value: listener.targetPlayer, inline: true },
+                    { name: 'Command Type', value: listener.commandType.toUpperCase(), inline: true },
+                    { name: 'Duration', value: `${result.duration || (Date.now() - listener.createdAt)}ms`, inline: true },
+                    { name: 'Response', value: result.message || 'Command completed successfully', inline: false }
+                )
+                .setTimestamp()
+                .setFooter({ text: 'Guild Command System' });
+
+            // Add message link if interaction is available
+            if (listener.interaction) {
+                try {
+                    // Create Discord message link
+                    const guildId = listener.interaction.guildId || listener.interaction.guild?.id;
+                    const channelId = listener.interaction.channelId || listener.interaction.channel?.id;
+                    const messageId = listener.interaction.id; // For slash commands, use interaction ID
+                    
+                    if (guildId && channelId) {
+                        // Try to get the actual message ID from the interaction
+                        let actualMessageId = messageId;
+                        
+                        // For slash commands, we need to get the reply message ID
+                        if (listener.interaction.replied) {
+                            try {
+                                const reply = await listener.interaction.fetchReply();
+                                if (reply && reply.id) {
+                                    actualMessageId = reply.id;
+                                }
+                            } catch (error) {
+                                // If we can't fetch the reply, use interaction ID as fallback
+                                logger.debug('Could not fetch interaction reply, using interaction ID');
+                            }
+                        }
+                        
+                        const messageLink = `https://discord.com/channels/${guildId}/${channelId}/${actualMessageId}`;
+                        
+                        embed.addFields({ 
+                            name: 'Original Command', 
+                            value: `[View Message](${messageLink})`, 
+                            inline: true 
+                        });
+                        
+                        // Also add executor information
+                        const executor = listener.interaction.user;
+                        if (executor) {
+                            embed.addFields({ 
+                                name: 'Executed By', 
+                                value: `${executor.displayName || executor.username} (${executor.id})`, 
+                                inline: true 
+                            });
+                        }
+                    }
+                } catch (error) {
+                    logger.debug('Could not create message link for command log', error);
+                }
+            }
+
+            // Send the log message
+            await channel.send({ embeds: [embed] });
+            
+            logger.debug(`Command log sent to Discord channel ${channelId} for ${listener.commandType} command`);
+
+        } catch (error) {
+            logger.logError(error, 'Failed to send command log to Discord');
+        }
+    }
+
+    /**
+     * Capitalize first letter of a string
+     * @param {string} str - String to capitalize
+     * @returns {string} Capitalized string
+     */
+    capitalizeFirst(str) {
+        if (!str) return '';
+        return str.charAt(0).toUpperCase() + str.slice(1);
     }
 
     /**

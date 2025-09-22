@@ -169,6 +169,24 @@ module.exports = {
                 .setDescription("Username of the player to promote")
                 .setRequired(true)
             )
+    )
+    .addSubcommand((subcommand) =>
+        subcommand
+            .setName("demote")
+            .setDescription("Demote a player in a guild")
+            .addStringOption((option) =>
+            option
+                .setName("guildname")
+                .setDescription("Name of the guild")
+                .setAutocomplete(true)
+                .setRequired(true)
+            )
+            .addStringOption((option) =>
+            option
+                .setName("username")
+                .setDescription("Username of the player to demote")
+                .setRequired(true)
+            )
     ),
     
     permission: 'user', // Base permission, subcommands can override

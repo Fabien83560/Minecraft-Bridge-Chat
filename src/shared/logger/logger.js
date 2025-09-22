@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const FileLogger = require('./file-logger');
+const FileLogger = require('./FileLogger');
 
 class Logger {
     constructor(config = {}) {

@@ -16,7 +16,7 @@ function getCommandResponseListener() {
 }
 
 module.exports = {
-    permission: 'admin', // Higher permission level for kick
+    permission: 'moderator',
     
     async execute(interaction, context) {
         // Defer the reply since this might take some time

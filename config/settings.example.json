@@ -37,6 +37,13 @@
                     "exponentialBackoff": true
                 }
             },
+            "_comment": "The guild ranks need to be least to greatest, without staff rank",
+            "ranks": [  
+                "BASE_RANK_NAME",
+                "FIRST_RANK_NAME",
+                "SECOND_RANK_NAME",
+                "THIRD_RANK_NAME"
+            ],
             "commands": {
                 "prefix": "/g",
                 "allowedCommands": ["gc", "oc", "invite", "kick", "promote", "demote"],
@@ -73,6 +80,13 @@
                     "exponentialBackoff": true
                 }
             },
+            "_comment": "The guild ranks need to be least to greatest, without staff rank",
+            "ranks": [  
+                "BASE_RANK_NAME",
+                "FIRST_RANK_NAME",
+                "SECOND_RANK_NAME",
+                "THIRD_RANK_NAME"
+            ],
             "commands": {
                 "prefix": "/g",
                 "allowedCommands": ["gc", "oc", "invite", "kick", "promote", "demote"],

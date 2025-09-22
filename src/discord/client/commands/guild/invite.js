@@ -16,7 +16,7 @@ function getCommandResponseListener() {
 }
 
 module.exports = {
-    permission: 'mod',
+    permission: 'moderator',
     
     async execute(interaction, context) {
         // Defer the reply since this might take some time

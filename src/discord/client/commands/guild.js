@@ -81,8 +81,8 @@ class GuildCommandManager {
     checkPermission(member, requiredPermission, context) {
         if (!member || !requiredPermission) return true;
 
-        const adminRoles = context.config.get('bridge.adminRoles') || [];
-        const modRoles = context.config.get('bridge.modRoles') || [];
+        const adminRoles = context.config.get('discord.permissions.adminRoles') || [];
+        const modRoles = context.config.get('discord.permissions.moderatorRoles') || [];
 
         switch (requiredPermission.toLowerCase()) {
             case 'admin':

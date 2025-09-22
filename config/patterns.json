@@ -898,31 +898,36 @@
           "setrank": {
             "success": [
               {
-                "pattern": "(\\w+) was set to (.+)\\.",
-                "groups": ["username", "toRank"],
-                "description": "Setrank success generic"
+                "pattern": "\\[.+\\] (\\w+) was promoted from (\\w+) to (\\w+)",
+                "groups": ["username", "fromRank", "toRank"],
+                "description": "Setrank success promoted"
               },
               {
-                "pattern": "Successfully set (\\w+)'s rank to (.+)",
-                "groups": ["username", "toRank"],
-                "description": "Setrank success explicit"
+                "pattern": "\\[.+\\] (\\w+) was demoted from (\\w+) to (\\w+)",
+                "groups": ["username", "fromRank", "toRank"],
+                "description": "Setrank success demoted"
               }
             ],
             "error": [
               {
-                "pattern": "You don't have permission to set ranks!",
+                "pattern": "Invalid usage! '/guild setrank <player> <rank>'",
                 "groups": [],
-                "description": "No permission"
+                "description": "Invalid command usage"
               },
               {
-                "pattern": "(\\w+) is not in your guild!",
+                "pattern": "I couldn't find a rank by the name of '(\\w+)'!",
+                "groups": ["rank"],
+                "description": "Cannot promote to higher rank"
+              },
+              {
+                "pattern": "\\[.+\\] (\\w+) is not in your guild!",
                 "groups": ["username"],
-                "description": "Player not in guild"
+                "description": "Player not in the guild"
               },
               {
-                "pattern": "Invalid rank specified\\.",
+                "pattern": "You don't have permission to promote players!",
                 "groups": [],
-                "description": "Invalid rank"
+                "description": "No permission to promote"
               }
             ]
           },

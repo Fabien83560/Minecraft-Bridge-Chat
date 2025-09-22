@@ -190,6 +190,30 @@ module.exports = {
     )
     .addSubcommand((subcommand) =>
         subcommand
+            .setName("setrank")
+            .setDescription("Set a player rank in the guild")
+            .addStringOption((option) =>
+            option
+                .setName("guildname")
+                .setDescription("Name of the guild")
+                .setAutocomplete(true)
+                .setRequired(true)
+            )
+            .addStringOption((option) =>
+            option
+                .setName("username")
+                .setDescription("Username of the player")
+                .setRequired(true)
+            )
+            .addStringOption((option) =>
+            option
+                .setName("rank")
+                .setDescription("Rank to set (case-insensitive)")
+                .setRequired(true)
+            )
+    )
+    .addSubcommand((subcommand) =>
+        subcommand
             .setName("blacklist")
             .setDescription("Blacklist a player (block add) for the guild")
             .addStringOption((option) =>

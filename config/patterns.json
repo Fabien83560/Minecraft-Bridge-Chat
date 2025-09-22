@@ -975,36 +975,16 @@
           "demote": {
             "success": [
               {
-                "pattern": "(?:You demoted|demoted) (\\w+)",
-                "groups": ["username"],
-                "description": "Successful guild demotion"
-              },
-              {
-                "pattern": "(\\w+) has been demoted",
-                "groups": ["username"],
-                "description": "Player demoted confirmation"
-              },
-              {
-                "pattern": "Successfully demoted (\\w+)",
-                "groups": ["username"],
-                "description": "Demotion success message"
+                "pattern": "\\[.+\\] (\\w+) was demoted from (\\w+) to (\\w+)",
+                "groups": ["username", "fromRank", "toRank"],
+                "description": "Player successfully demoted"
               }
             ],
             "error": [
               {
-                "pattern": "You cannot demote (\\w+)!",
-                "groups": ["username"],
-                "description": "Cannot demote specific player"
-              },
-              {
-                "pattern": "(\\w+) is not in your guild!",
-                "groups": ["username"],
-                "description": "Player not in guild"
-              },
-              {
-                "pattern": "Player (\\w+) not found!",
-                "groups": ["username"],
-                "description": "Player not found"
+                "pattern": "Invalid usage! '/guild demote <player>'",
+                "groups": [],
+                "description": "Invalid command usage"
               },
               {
                 "pattern": "You don't have permission to demote players!",
@@ -1012,14 +992,24 @@
                 "description": "No permission to demote"
               },
               {
-                "pattern": "(\\w+) is already at the lowest rank!",
+                "pattern": "\\[.+\\] (\\w+) is already the lowest rank you've created!",
                 "groups": ["username"],
-                "description": "Player already at minimum rank"
+                "description": "Player already at the lowest rank"
               },
               {
-                "pattern": "You cannot demote this player!",
+                "pattern": "You must be the Guild Master to use that command!",
                 "groups": [],
-                "description": "Cannot demote this specific player"
+                "description": "Player is not the Guild Master"
+              },
+              {
+                "pattern": "Can't find a player by the name of '(\\w+)'",
+                "groups": ["username"],
+                "description": "Player not found"
+              },
+              {
+                "pattern": "\\[.+\\] (\\w+) is not in your guild!",
+                "groups": ["username"],
+                "description": "Player not in the guild"
               }
             ]
           }

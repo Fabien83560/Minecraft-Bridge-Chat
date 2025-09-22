@@ -869,13 +869,65 @@
               }
             ]
           },
-          "promote": {
+          "blacklist": {
             "success": [
               {
-                "pattern": "(?:You promoted|promoted) (\\w+)",
+                "pattern": "Added (?:\\[.+\\] )?(\\w+) to your block list\\.",
                 "groups": ["username"],
-                "description": "Successful guild promotion"
+                "description": "Successful blacklist (block add)"
+              }
+            ],
+            "error": [
+              {
+                "pattern": "Can't find a player by the name of '(\\w+)'",
+                "groups": ["username"],
+                "description": "Player not found"
               },
+              {
+                "pattern": "(\\w+) is already on your block list",
+                "groups": ["username"],
+                "description": "Already blacklisted"
+              },
+              {
+                "pattern": "You cannot block yourself!",
+                "groups": [],
+                "description": "Cannot block self"
+              }
+            ]
+          },
+          "setrank": {
+            "success": [
+              {
+                "pattern": "(\\w+) was set to (.+)\\.",
+                "groups": ["username", "toRank"],
+                "description": "Setrank success generic"
+              },
+              {
+                "pattern": "Successfully set (\\w+)'s rank to (.+)",
+                "groups": ["username", "toRank"],
+                "description": "Setrank success explicit"
+              }
+            ],
+            "error": [
+              {
+                "pattern": "You don't have permission to set ranks!",
+                "groups": [],
+                "description": "No permission"
+              },
+              {
+                "pattern": "(\\w+) is not in your guild!",
+                "groups": ["username"],
+                "description": "Player not in guild"
+              },
+              {
+                "pattern": "Invalid rank specified\\.",
+                "groups": [],
+                "description": "Invalid rank"
+              }
+            ]
+          },
+          "promote": {
+            "success": [
               {
                 "pattern": "(\\w+) has been promoted",
                 "groups": ["username"],

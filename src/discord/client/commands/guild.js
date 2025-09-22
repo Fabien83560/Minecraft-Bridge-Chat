@@ -108,38 +108,68 @@ const guildCommandManager = new GuildCommandManager();
 
 module.exports = {
     data: new SlashCommandBuilder()
-        .setName('guild')
-        .setDescription('Guild management commands')
-        .addSubcommand(subcommand =>
-            subcommand
-                .setName('invite')
-                .setDescription('Invite a player to a guild')
-                .addStringOption(option =>
-                    option.setName('guildname')
-                        .setDescription('Name of the guild to invite to')
-                        .setRequired(true)
-                        .setAutocomplete(true))
-                .addStringOption(option =>
-                    option.setName('username')
-                        .setDescription('Username of the player to invite')
-                        .setRequired(true)))
-        .addSubcommand(subcommand =>
-            subcommand
-                .setName('kick')
-                .setDescription('Kick a player from a guild')
-                .addStringOption(option =>
-                    option.setName('guildname')
-                        .setDescription('Name of the guild to kick from')
-                        .setRequired(true)
-                        .setAutocomplete(true))
-                .addStringOption(option =>
-                    option.setName('username')
-                        .setDescription('Username of the player to kick')
-                        .setRequired(true))
-                .addStringOption(option =>
-                    option.setName('reason')
-                        .setDescription('Reason for kicking the player')
-                        .setRequired(true))),
+    .setName("guild")
+    .setDescription("Guild management commands")
+    .addSubcommand((subcommand) =>
+        subcommand
+            .setName("invite")
+            .setDescription("Invite a player to a guild")
+            .addStringOption((option) =>
+            option
+                .setName("guildname")
+                .setDescription("Name of the guild to invite to")
+                .setAutocomplete(true)
+                .setRequired(true)
+            )
+            .addStringOption((option) =>
+            option
+                .setName("username")
+                .setDescription("Username of the player to invite")
+                .setRequired(true)
+            )
+    )
+    .addSubcommand((subcommand) =>
+        subcommand
+            .setName("kick")
+            .setDescription("Kick a player from a guild")
+            .addStringOption((option) =>
+            option
+                .setName("guildname")
+                .setDescription("Name of the guild to kick from")
+                .setAutocomplete(true)
+                .setRequired(true)
+            )
+            .addStringOption((option) =>
+            option
+                .setName("username")
+                .setDescription("Username of the player to kick")
+                .setRequired(true)
+            )
+            .addStringOption((option) =>
+            option
+                .setName("reason")
+                .setDescription("Reason for kicking the player")
+                .setRequired(true)
+            )
+    )
+    .addSubcommand((subcommand) =>
+        subcommand
+            .setName("promote")
+            .setDescription("Promote a player in a guild")
+            .addStringOption((option) =>
+            option
+                .setName("guildname")
+                .setDescription("Name of the guild")
+                .setAutocomplete(true)
+                .setRequired(true)
+            )
+            .addStringOption((option) =>
+            option
+                .setName("username")
+                .setDescription("Username of the player to promote")
+                .setRequired(true)
+            )
+    ),
     
     permission: 'user', // Base permission, subcommands can override
     

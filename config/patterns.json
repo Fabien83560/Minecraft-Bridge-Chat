@@ -790,7 +790,235 @@
             "pattern": "^You do not have permission",
             "description": "Permission error messages"
           }
-        ]
+        ],
+        "commandsResponse": {
+          "invite": {
+            "success": [
+              {
+                "pattern": "You invited \\[.+\\] (\\w+) to your guild\\. They have 5 minutes to accept\\.",
+                "groups": ["username"],
+                "description": "Successful guild invite with 5 minute timer"
+              },
+              {
+                "pattern": "You sent an offline invite to \\[.+\\] (\\w+)! They will have 5 minutes to accept once they come online!",
+                "groups": ["username"],
+                "description": "Successful offline guild invite"
+              }
+            ],
+            "error": [
+              {
+                "pattern": "You do not have permission to invite players!",
+                "groups": [],
+                "description": "No permission to invite"
+              },
+              {
+                "pattern": "\\[.+\\] (\\w+) is already in your guild!",
+                "groups": ["username"],
+                "description": "Player already in this guild"
+              },
+              {
+                "pattern": "\\[.+\\] (\\w+) is already in another guild!",
+                "groups": ["username"],
+                "description": "Player already in another guild"
+              },
+              {
+                "pattern": "Your guild is full!",
+                "groups": [],
+                "description": "Guild at maximum capacity"
+              },
+              {
+                "pattern": "Can't find a player by the name of '(\\w+)'",
+                "groups": ["username"],
+                "description": "Player not found"
+              },
+              {
+                "pattern": "You've already invited \\[.+\\] (\\w+) to your guild! Wait for them to accept!",
+                "groups": ["username"],
+                "description": "Player already have a waiting invitation"
+              }
+            ]
+          },
+          "kick": {
+            "success": [
+              {
+                "pattern": "You kicked \\[.+\\] (\\w+) from the guild!",
+                "groups": ["username"],
+                "description": "Successful guild kick"
+              }
+            ],
+            "error": [
+              {
+                "pattern": "\\[.+\\] (\\w+) is not in your guild!",
+                "groups": ["username"],
+                "description": "Player not in guild (with rank)"
+              },
+              {
+                "pattern": "That player is not in your guild!",
+                "groups": [],
+                "description": "Player not in guild (generic)"
+              },
+              {
+                "pattern": "You do not have permission to kick players!",
+                "groups": [],
+                "description": "No permission to kick"
+              },
+              {
+                "pattern": "Can't find a player by the name of '(\\w+)'",
+                "groups": ["username"],
+                "description": "Player not found"
+              }
+            ]
+          },
+          "blacklist": {
+            "success": [
+              {
+                "pattern": "Added (?:\\[.+\\] )?(\\w+) to your block list\\.",
+                "groups": ["username"],
+                "description": "Successful blacklist (block add)"
+              }
+            ],
+            "error": [
+              {
+                "pattern": "Can't find a player by the name of '(\\w+)'",
+                "groups": ["username"],
+                "description": "Player not found"
+              },
+              {
+                "pattern": "(\\w+) is already on your block list",
+                "groups": ["username"],
+                "description": "Already blacklisted"
+              },
+              {
+                "pattern": "You cannot block yourself!",
+                "groups": [],
+                "description": "Cannot block self"
+              }
+            ]
+          },
+          "setrank": {
+            "success": [
+              {
+                "pattern": "\\[.+\\] (\\w+) was promoted from (\\w+) to (\\w+)",
+                "groups": ["username", "fromRank", "toRank"],
+                "description": "Setrank success promoted"
+              },
+              {
+                "pattern": "\\[.+\\] (\\w+) was demoted from (\\w+) to (\\w+)",
+                "groups": ["username", "fromRank", "toRank"],
+                "description": "Setrank success demoted"
+              }
+            ],
+            "error": [
+              {
+                "pattern": "Invalid usage! '/guild setrank <player> <rank>'",
+                "groups": [],
+                "description": "Invalid command usage"
+              },
+              {
+                "pattern": "I couldn't find a rank by the name of '(\\w+)'!",
+                "groups": ["rank"],
+                "description": "Cannot promote to higher rank"
+              },
+              {
+                "pattern": "\\[.+\\] (\\w+) is not in your guild!",
+                "groups": ["username"],
+                "description": "Player not in the guild"
+              },
+              {
+                "pattern": "You don't have permission to promote players!",
+                "groups": [],
+                "description": "No permission to promote"
+              }
+            ]
+          },
+          "promote": {
+            "success": [
+              {
+                "pattern": "\\[.+\\] (\\w+) was promoted from (\\w+) to (\\w+)",
+                "groups": ["username", "fromRank", "toRank"],
+                "description": "Player successfully promoted "
+              }
+            ],
+            "error": [
+              {
+                "pattern": "Invalid usage! '/guild promote <player>'",
+                "groups": [],
+                "description": "Invalid command usage"
+              },
+              {
+                "pattern": "You can only promote up to your own rank!",
+                "groups": [],
+                "description": "Cannot promote to higher rank"
+              },
+              {
+                "pattern": "\\[.+\\] (\\w+) is already the highest rank you've created!",
+                "groups": ["username"],
+                "description": "Player already at the highest rank"
+              },
+              {
+                "pattern": "You don't have permission to promote players!",
+                "groups": [],
+                "description": "No permission to promote"
+              },
+              {
+                "pattern": "You must be the Guild Master to use that command!",
+                "groups": [],
+                "description": "Player is not the Guild Master"
+              },
+              {
+                "pattern": "Can't find a player by the name of '(\\w+)'",
+                "groups": ["username"],
+                "description": "Player not found"
+              },
+              {
+                "pattern": "\\[.+\\] (\\w+) is not in your guild!",
+                "groups": ["username"],
+                "description": "Player not in the guild"
+              }
+            ]
+          },
+          "demote": {
+            "success": [
+              {
+                "pattern": "\\[.+\\] (\\w+) was demoted from (\\w+) to (\\w+)",
+                "groups": ["username", "fromRank", "toRank"],
+                "description": "Player successfully demoted"
+              }
+            ],
+            "error": [
+              {
+                "pattern": "Invalid usage! '/guild demote <player>'",
+                "groups": [],
+                "description": "Invalid command usage"
+              },
+              {
+                "pattern": "You don't have permission to demote players!",
+                "groups": [],
+                "description": "No permission to demote"
+              },
+              {
+                "pattern": "\\[.+\\] (\\w+) is already the lowest rank you've created!",
+                "groups": ["username"],
+                "description": "Player already at the lowest rank"
+              },
+              {
+                "pattern": "You must be the Guild Master to use that command!",
+                "groups": [],
+                "description": "Player is not the Guild Master"
+              },
+              {
+                "pattern": "Can't find a player by the name of '(\\w+)'",
+                "groups": ["username"],
+                "description": "Player not found"
+              },
+              {
+                "pattern": "\\[.+\\] (\\w+) is not in your guild!",
+                "groups": ["username"],
+                "description": "Player not in the guild"
+              }
+            ]
+          }
+        }
       }
     }
   },
@@ -802,13 +1030,51 @@
       "ampersand": "&[0-9a-fklmnor]"
     },
     "ranks": {
-      "common": ["Member", "Officer", "Admin", "Owner", "VIP", "VIP+", "MVP", "MVP+", "MVP++"],
-      "hypixel": ["VIP", "VIP+", "MVP", "MVP+", "MVP++", "YOUTUBE", "PIG+++", "ADMIN"]
+      "common": [
+        "Member",
+        "Officer",
+        "Admin",
+        "Owner",
+        "VIP",
+        "VIP+",
+        "MVP",
+        "MVP+",
+        "MVP++"
+      ],
+      "hypixel": [
+        "VIP",
+        "VIP+",
+        "MVP",
+        "MVP+",
+        "MVP++",
+        "YOUTUBE",
+        "PIG+++",
+        "ADMIN"
+      ]
     },
     "messageTypes": {
       "chat": ["guild", "officer", "private", "party"],
-      "events": ["join", "leave", "kick", "promote", "demote", "invite", "online", "level", "motd", "misc"],
-      "system": ["game_notification", "game_result", "reward", "daily_reward", "server_restart", "server_move", "connection_issue"]
+      "events": [
+        "join",
+        "leave",
+        "kick",
+        "promote",
+        "demote",
+        "invite",
+        "online",
+        "level",
+        "motd",
+        "misc"
+      ],
+      "system": [
+        "game_notification",
+        "game_result",
+        "reward",
+        "daily_reward",
+        "server_restart",
+        "server_move",
+        "connection_issue"
+      ]
     }
   },
   "metadata": {

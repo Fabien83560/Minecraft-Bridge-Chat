@@ -171,6 +171,52 @@ class PatternLoader {
         this.cache.set(cacheKey, result);
         return result;
     }
+    /**
+     * Get commands response patterns for a specific server
+     * @param {string} serverName - Server name (e.g., 'Hypixel')
+     * @returns {object|null} Commands response patterns or null if not found
+     */
+    getCommandsResponsePatterns(serverName) {
+        if (!this.isLoaded) {
+            throw new Error('Patterns not loaded');
+        }
+
+        const cacheKey = `commandsResponse-${serverName}`;
+        if (this.cache.has(cacheKey)) {
+            return this.cache.get(cacheKey);
+        }
+
+        let result = null;
+
+        try {
+            const serverData = this.patterns?.servers?.[serverName];
+            if (!serverData) {
+                logger.warn(`No server data found for: ${serverName}`);
+                this.cache.set(cacheKey, null);
+                return null;
+            }
+
+            const commandsResponse = serverData.detection?.commandsResponse;
+            if (!commandsResponse) {
+                logger.debug(`No commands response patterns found for server: ${serverName}`);
+                this.cache.set(cacheKey, null);
+                return null;
+            }
+
+            result = commandsResponse;
+            this.cache.set(cacheKey, result);
+            
+            const commandTypes = Object.keys(commandsResponse);
+            logger.debug(`Loaded commands response patterns for ${serverName}: ${commandTypes.join(', ')}`);
+            
+            return result;
+
+        } catch (error) {
+            logger.logError(error, `Failed to get commands response patterns for ${serverName}`);
+            this.cache.set(cacheKey, null);
+            return null;
+        }
+    }
 
     /**
      * Get all event types supported by a server

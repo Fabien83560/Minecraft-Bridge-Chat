@@ -36,7 +36,14 @@
                     "retryDelay": 30000,
                     "exponentialBackoff": true
                 }
-            }
+            },
+            "_comment": "The guild ranks need to be least to greatest, without staff rank",
+            "ranks": [  
+                "BASE_RANK_NAME",
+                "FIRST_RANK_NAME",
+                "SECOND_RANK_NAME",
+                "THIRD_RANK_NAME"
+            ]
         },
         {
             "name": "FrenchLegacyII",
@@ -67,18 +74,27 @@
                     "retryDelay": 30000,
                     "exponentialBackoff": true
                 }
-            }
+            },
+            "_comment": "The guild ranks need to be least to greatest, without staff rank",
+            "ranks": [  
+                "BASE_RANK_NAME",
+                "FIRST_RANK_NAME",
+                "SECOND_RANK_NAME",
+                "THIRD_RANK_NAME"
+            ]
         }
     ],
     "bridge": {
         "channels": {
             "chat": {
                 "id": "CHAT_CHANNEL_ID",
-                "webhookUrl": "OPTIONAL_WEBHOOK_URL"
+                "webhookUrl": "OPTIONAL_WEBHOOK_URL",
+                "_comment": "WARNING : You need an https://discord.com/ url to work"
             },
             "staff": {
                 "id": "STAFF_CHANNEL_ID",
-                "webhookUrl": "OPTIONAL_WEBHOOK_URL"
+                "webhookUrl": "OPTIONAL_WEBHOOK_URL",
+                "_comment": "WARNING : You need an https://discord.com/ url to work"
             }
         },
         "webhook": {
@@ -89,10 +105,13 @@
             "enabled": true,
             "officerToGuildChat": false,
             "officerToOfficerChat": true,
-            "showTags": true,
-            "showSourceTag": true,
+            "officerToDiscord": true,
+            "discordToMinecraft": true,
+            "showTags": false,
+            "showSourceTag": false,
             "shareableEvents": [
                 "welcome",
+                "leave",
                 "kick",
                 "promote",
                 "demote",
@@ -118,13 +137,23 @@
                 "limit": 10,
                 "window": 60000
             }
+        }
+    },
+    "discord": {
+        "permissions": {
+            "moderatorRoles": [
+                "MODERATOR_ROLE_ID"
+            ],
+            "adminRoles": [
+                "ADMINISTRATOR_ROLE_ID"
+            ]
         },
-        "messageQueue": {
-            "maxSize": 1000,
-            "processingInterval": 1000,
-            "maxRetries": 3,
-            "retryDelay": 2000,
-            "priorityLevels": ["high", "normal", "low"]
+        "logChannels": {
+            "default": "DEFAULT_LOG_CHANNEL_ID",
+            "invite": "INVITE_LOG_CHANNEL_ID",
+            "kick": "KICK_LOG_CHANNEL_ID",
+            "promote": "PROMOTE_LOG_CHANNEL_ID",
+            "demote": "DEMOTE_LOG_CHANNEL_ID"
         }
     },
     "features": {

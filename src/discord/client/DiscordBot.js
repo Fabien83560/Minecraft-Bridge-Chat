@@ -5,7 +5,6 @@ const EventEmitter = require('events');
 // Specific Imports
 const BridgeLocator = require("../../bridgeLocator.js");
 const MessageHandler = require("./handlers/MessageHandler.js");
-const CommandHandler = require("./handlers/CommandHandler.js");
 const SlashCommandHandler = require("./handlers/SlashCommandHandler.js");
 
 const logger = require("../../shared/logger");
@@ -26,7 +25,6 @@ class DiscordBot extends EventEmitter {
 
         // Handlers
         this.messageHandler = null;
-        this.commandHandler = null;
         this.slashCommandHandler = null;
 
         this.initializeClient();
@@ -47,7 +45,6 @@ class DiscordBot extends EventEmitter {
 
             // Initialize handlers (but don't initialize them with client yet)
             this.messageHandler = new MessageHandler();
-            this.commandHandler = new CommandHandler();
             this.slashCommandHandler = new SlashCommandHandler();
 
             this.setupEventHandlers();
@@ -219,12 +216,6 @@ class DiscordBot extends EventEmitter {
                 logger.debug('Message handler initialized and events setup');
             }
 
-            // Initialize command handler
-            if (this.commandHandler) {
-                await this.commandHandler.initialize(this.client);
-                logger.debug('Command handler initialized');
-            }
-
             // Initialize slash command handler
             if (this.slashCommandHandler) {
                 await this.slashCommandHandler.initialize(this.client);
@@ -370,9 +361,6 @@ class DiscordBot extends EventEmitter {
                 this.messageHandler.cleanup();
             }
 
-            if (this.commandHandler) {
-                this.commandHandler.cleanup();
-            }
             if (this.slashCommandHandler) {
                 this.slashCommandHandler.cleanup();
             }

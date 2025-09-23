@@ -211,24 +211,6 @@ module.exports = {
                 .setDescription("Rank to set (case-insensitive)")
                 .setRequired(true)
             )
-    )
-    .addSubcommand((subcommand) =>
-        subcommand
-            .setName("blacklist")
-            .setDescription("Blacklist a player (block add) for the guild")
-            .addStringOption((option) =>
-            option
-                .setName("guildname")
-                .setDescription("Name of the guild")
-                .setAutocomplete(true)
-                .setRequired(true)
-            )
-            .addStringOption((option) =>
-            option
-                .setName("username")
-                .setDescription("Username to blacklist (block add)")
-                .setRequired(true)
-            )
     ),
     
     permission: 'user', // Base permission, subcommands can override

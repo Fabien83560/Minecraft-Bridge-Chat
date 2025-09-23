@@ -898,6 +898,11 @@
           "setrank": {
             "success": [
               {
+                "pattern": "\\[.+\\] (\\w+)'s rank was changed from (\\w+) to (\\w+)",
+                "groups": ["username", "fromRank", "toRank"],
+                "description": "Setrank success"
+              },
+              {
                 "pattern": "\\[.+\\] (\\w+) was promoted from (\\w+) to (\\w+)",
                 "groups": ["username", "fromRank", "toRank"],
                 "description": "Setrank success promoted"
@@ -928,6 +933,16 @@
                 "pattern": "You don't have permission to promote players!",
                 "groups": [],
                 "description": "No permission to promote"
+              },
+              {
+                "pattern": "They already have that rank!",
+                "groups": [],
+                "description": "Player already have this rank"
+              },
+              {
+                "pattern": "Can't find a player by the name of '(\\w+)'",
+                "groups": ["username"],
+                "description": "Can't find this player name"
               }
             ]
           },

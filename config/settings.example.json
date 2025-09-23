@@ -43,12 +43,7 @@
                 "FIRST_RANK_NAME",
                 "SECOND_RANK_NAME",
                 "THIRD_RANK_NAME"
-            ],
-            "commands": {
-                "prefix": "/g",
-                "allowedCommands": ["gc", "oc", "invite", "kick", "promote", "demote"],
-                "cooldown": 5000
-            }
+            ]
         },
         {
             "name": "FrenchLegacyII",
@@ -86,12 +81,7 @@
                 "FIRST_RANK_NAME",
                 "SECOND_RANK_NAME",
                 "THIRD_RANK_NAME"
-            ],
-            "commands": {
-                "prefix": "/g",
-                "allowedCommands": ["gc", "oc", "invite", "kick", "promote", "demote"],
-                "cooldown": 5000
-            }
+            ]
         }
     ],
     "bridge": {
@@ -274,8 +264,7 @@
             "enablePerformanceMonitoring": true,
             "logSlowOperations": true,
             "slowOperationThreshold": 1000,
-            "memoryMonitoring": true,
-            "statisticsInterval": 300000
+            "memoryMonitoring": true
         }
     }
 }

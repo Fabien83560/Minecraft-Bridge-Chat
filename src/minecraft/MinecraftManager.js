@@ -214,7 +214,6 @@ class MinecraftManager {
             
             this._bridgeCoordinator.initialize(discordManager, this);
             logger.bridge('✅ Discord integration setup completed for MinecraftManager');
-            logger.debug(`[INTEGRATION] Bridge coordinator stats: ${JSON.stringify(this._bridgeCoordinator.getStatistics())}`);
 
         } catch (error) {
             logger.logError(error, 'Failed to setup internal Discord integration');
@@ -293,14 +292,6 @@ class MinecraftManager {
         return this._bridgeCoordinator;
     }
 
-    getInterGuildStats() {
-        if (!this._botManager) {
-            return null;
-        }
-
-        return this._botManager.getInterGuildStats();
-    }
-
     updateInterGuildConfig(newConfig) {
         if (this._botManager) {
             this._botManager.updateInterGuildConfig(newConfig);
@@ -308,36 +299,11 @@ class MinecraftManager {
         }
     }
 
-    testMessageFormatting(testData) {
-        if (!this._botManager) {
-            return { error: 'BotManager not available' };
-        }
-
-        return this._botManager.testInterGuildFormatting(testData);
-    }
-
     clearInterGuildCache() {
         if (this._botManager) {
             this._botManager.clearInterGuildCache();
             logger.info('Inter-guild cache cleared via MinecraftManager');
         }
-    }
-
-    /**
-     * Get debugging information
-     */
-    getDebugInfo() {
-        return {
-            isInitialized: this._isInitialized,
-            isStarted: this._isStarted,
-            hasDiscordManager: !!this._discordManager,
-            hasBridgeCoordinator: !!this._bridgeCoordinator,
-            messageHandlers: this.messageHandlers.length,
-            eventHandlers: this.eventHandlers.length,
-            connectionHandlers: this.connectionHandlers.length,
-            errorHandlers: this.errorHandlers.length,
-            bridgeCoordinatorStats: this._bridgeCoordinator ? this._bridgeCoordinator.getStatistics() : null
-        };
     }
 }
 

@@ -362,38 +362,6 @@ class EventParser {
     getCleaner() {
         return this._cleaner;
     }
-
-    /**
-     * Test event parsing (for debugging)
-     * @param {string} messageText - Message to test
-     * @param {object} guildConfig - Guild configuration
-     * @returns {object} Test results
-     */
-    testEventParsing(messageText, guildConfig) {
-        const testResults = {
-            input: messageText,
-            cleaned: this._cleaner.cleanMessage(messageText),
-            isEvent: this._patterns.isGuildEvent(messageText),
-            eventType: this._patterns.getEventType(messageText),
-            patternMatch: this._patterns.matchEvent(messageText),
-            parsedEvent: null,
-            inCooldown: false
-        };
-
-        if (testResults.patternMatch) {
-            testResults.inCooldown = this.isEventInCooldown(testResults.patternMatch, guildConfig);
-            
-            if (!testResults.inCooldown) {
-                testResults.parsedEvent = this.createEventResult(
-                    testResults.patternMatch, 
-                    messageText, 
-                    guildConfig
-                );
-            }
-        }
-
-        return testResults;
-    }
 }
 
 module.exports = EventParser;

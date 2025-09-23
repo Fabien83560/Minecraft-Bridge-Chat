@@ -7,6 +7,7 @@ const BridgeLocator = require("../../bridgeLocator.js");
 const MessageHandler = require("./handlers/MessageHandler.js");
 const CommandHandler = require("./handlers/CommandHandler.js");
 const SlashCommandHandler = require("./handlers/SlashCommandHandler.js");
+
 const logger = require("../../shared/logger");
 
 class DiscordBot extends EventEmitter {
@@ -28,29 +29,19 @@ class DiscordBot extends EventEmitter {
         this.commandHandler = null;
         this.slashCommandHandler = null;
 
-        // Statistics
-        this.stats = {
-            startTime: null,
-            messagesReceived: 0,
-            messagesSent: 0,
-            commandsProcessed: 0,
-            slashCommandsProcessed: 0,
-            errors: 0,
-            reconnections: 0
-        };
-
         this.initializeClient();
     }
 
     initializeClient() {
         try {
-            // Create Discord client with necessary intents
+            // Create Discord client with necessary intents (including reactions for error handling)
             this.client = new Client({
                 intents: [
                     GatewayIntentBits.Guilds,
                     GatewayIntentBits.GuildMessages,
                     GatewayIntentBits.MessageContent,
-                    GatewayIntentBits.GuildMembers
+                    GatewayIntentBits.GuildMembers,
+                    GatewayIntentBits.GuildMessageReactions // Added for error handling reactions
                 ]
             });
 
@@ -61,7 +52,7 @@ class DiscordBot extends EventEmitter {
 
             this.setupEventHandlers();
             
-            logger.discord('Discord client initialized with intents');
+            logger.discord('Discord client initialized with intents (including reactions)');
 
         } catch (error) {
             logger.logError(error, 'Failed to initialize Discord client');
@@ -122,7 +113,6 @@ class DiscordBot extends EventEmitter {
 
         // Error event
         this.client.on('error', (error) => {
-            this.stats.errors++;
             logger.logError(error, 'Discord bot error');
             
             this.emit('error', error);
@@ -134,26 +124,13 @@ class DiscordBot extends EventEmitter {
         });
 
         // Message event - handle both regular messages and commands
-        this.client.on('messageCreate', async (message) => {
-            this.stats.messagesReceived++;
-            
-            if (!this._isReady) return;
+        this.client.on('messageCreate', async (message) => {            
+            if (!this._isReady)
+                return;
 
-            // Check if message is a command
-            const commandPrefix = this.config.get('bridge.commandPrefix') || '!';
-            
-            if (message.content.startsWith(commandPrefix)) {
-                // Handle command
-                if (this.commandHandler) {
-                    const commandString = message.content.substring(commandPrefix.length).trim();
-                    await this.commandHandler.processCommand(message, commandString);
-                    this.stats.commandsProcessed++;
-                }
-            } else {
-                // Handle regular message
-                if (this.messageHandler) {
-                    await this.messageHandler.handleMessage(message);
-                }
+            // Handle regular message
+            if (this.messageHandler) {
+                await this.messageHandler.handleMessage(message);
             }
         });
 
@@ -257,7 +234,6 @@ class DiscordBot extends EventEmitter {
                 
                 logger.debug('Slash command handler initialized and events setup');
             }
-
             logger.debug('All Discord bot handlers initialized');
 
         } catch (error) {
@@ -297,64 +273,68 @@ class DiscordBot extends EventEmitter {
             // Reset connection state before starting
             this._isConnected = false;
             this._isReady = false;
-
             this.connectionAttempts++;
+
             logger.discord(`Starting Discord bot (attempt ${this.connectionAttempts}/${this.maxConnectionAttempts})`);
 
-            this.stats.startTime = Date.now();
+            logger.debug(`Connection attempt ${this.connectionAttempts}/${this.maxConnectionAttempts}`);
 
             // Login to Discord
             await this.client.login(token);
 
-            // Wait for ready event
             await this.waitForReady();
 
             logger.discord('✅ Discord bot started successfully');
 
         } catch (error) {
-            this.stats.errors++;
             logger.logError(error, 'Failed to start Discord bot');
 
             if (this.connectionAttempts < this.maxConnectionAttempts) {
                 this.scheduleReconnection();
+                logger.logError(error, `Discord bot startup failed (attempt ${this.connectionAttempts}/${this.maxConnectionAttempts})`);
             }
 
             throw error;
         }
     }
 
-    async waitForReady() {
+    async waitForReady(timeout = 30000) {
         return new Promise((resolve, reject) => {
-            const timeout = setTimeout(() => {
-                reject(new Error('Discord bot ready timeout'));
-            }, 30000); // 30 second timeout
-
-            const onReady = () => {
-                clearTimeout(timeout);
-                this.client.off('error', onError);
-                resolve();
-            };
-
-            const onError = (error) => {
-                clearTimeout(timeout);
-                this.client.off('ready', onReady);
-                reject(error);
-            };
-
             if (this._isReady) {
-                clearTimeout(timeout);
                 resolve();
                 return;
             }
 
-            this.client.once('ready', onReady);
-            this.client.once('error', onError);
+            const timeoutId = setTimeout(() => {
+                reject(new Error('Discord bot ready timeout'));
+            }, timeout);
+
+            const onReady = () => {
+                clearTimeout(timeoutId);
+                this.removeListener('error', onError);
+                resolve();
+            };
+
+            const onError = (error) => {
+                clearTimeout(timeoutId);
+                this.removeListener('ready', onReady);
+                reject(error);
+            };
+
+            this.once('connection', (data) => {
+                if (data.type === 'connected') {
+                    onReady();
+                }
+            });
+
+            this.once('error', onError);
         });
     }
 
-    scheduleReconnection() {
-        if (this.reconnectTimeout) {
-            clearTimeout(this.reconnectTimeout);
+    async stop() {
+        if (!this._isConnected && !this.client) {
+            logger.debug('Discord bot not connected, nothing to stop');
+            return;
         }
 
         const delay = Math.min(5000 * Math.pow(2, this.connectionAttempts - 1), 300000); // Exponential backoff, max 5 minutes
@@ -389,6 +369,7 @@ class DiscordBot extends EventEmitter {
             if (this.messageHandler) {
                 this.messageHandler.cleanup();
             }
+
             if (this.commandHandler) {
                 this.commandHandler.cleanup();
             }
@@ -410,25 +391,79 @@ class DiscordBot extends EventEmitter {
         }
     }
 
+    scheduleReconnection() {
+        if (this.reconnectTimeout) {
+            return; // Reconnection already scheduled
+        }
+
+        if (this.connectionAttempts >= this.maxConnectionAttempts) {
+            logger.error('Max reconnection attempts reached. Giving up.');
+            this.emit('error', new Error('Max reconnection attempts reached'));
+            return;
+        }
+
+        const reconnectDelay = Math.min(5000 * this.connectionAttempts, 30000); // Exponential backoff, max 30s
+        
+        logger.discord(`Scheduling reconnection in ${reconnectDelay}ms...`);
+        
+        this.reconnectTimeout = setTimeout(async () => {
+            this.reconnectTimeout = null;
+            
+            try {
+                logger.discord('Attempting to reconnect...');
+                await this.start();
+            } catch (error) {
+                logger.logError(error, 'Reconnection failed');
+                this.scheduleReconnection(); // Schedule another attempt
+            }
+        }, reconnectDelay);
+    }
+
+    // ==================== EVENT REGISTRATION METHODS ====================
+
+    /**
+     * Register callback for message events
+     * @param {function} callback - Message event callback
+     */
+    onMessage(callback) {
+        this.on('message', callback);
+        logger.debug('Message handler registered on DiscordBot');
+    }
+
+    /**
+     * Register callback for connection events
+     * @param {function} callback - Connection event callback
+     */
+    onConnection(callback) {
+        this.on('connection', callback);
+        logger.debug('Connection handler registered on DiscordBot');
+    }
+
+    /**
+     * Register callback for error events
+     * @param {function} callback - Error event callback
+     */
+    onError(callback) {
+        this.on('error', callback);
+        logger.debug('Error handler registered on DiscordBot');
+    }
+
+    // ==================== STATUS METHODS ====================
+
     isConnected() {
-        return this._isConnected;
+        return this._isConnected && this._isReady;
     }
 
     isReady() {
         return this._isReady;
     }
 
-    getClient() {
-        return this.client;
-    }
-
     getConnectionStatus() {
         return {
             connected: this._isConnected,
             ready: this._isReady,
-            connectionAttempts: this.connectionAttempts,
-            guilds: this.client ? this.client.guilds.cache.size : 0,
-            ping: this.client ? this.client.ws.ping : null
+            attempts: this.connectionAttempts,
+            maxAttempts: this.maxConnectionAttempts
         };
     }
 
@@ -440,66 +475,18 @@ class DiscordBot extends EventEmitter {
             throw new Error('SlashCommandHandler not available');
         }
 
-        try {
-            const result = await this.slashCommandHandler.reloadCommands();
-            logger.discord(`Slash commands reloaded: ${result.success ? 'success' : 'failed'}`);
-            return result;
-        } catch (error) {
-            logger.logError(error, 'Failed to reload slash commands');
-            throw error;
-        }
-    }
-
-    getStatistics() {
-        const uptime = this.stats.startTime ? 
-            Date.now() - this.stats.startTime : 0;
-
         return {
-            ...this.stats,
-            uptime: uptime,
-            connected: this._isConnected,
-            ready: this._isReady,
-            connectionAttempts: this.connectionAttempts,
-            guilds: this.client ? this.client.guilds.cache.size : 0,
-            users: this.client ? this.client.users.cache.size : 0,
-            channels: this.client ? this.client.channels.cache.size : 0,
-            ping: this.client ? this.client.ws.ping : null,
-            handlers: {
-                messageHandler: !!this.messageHandler,
-                commandHandler: !!this.commandHandler,
-                slashCommandHandler: !!this.slashCommandHandler
-            }
+            username: this.client.user.username,
+            tag: this.client.user.tag,
+            id: this.client.user.id,
+            avatar: this.client.user.displayAvatarURL(),
+            guilds: this.client.guilds.cache.size,
+            users: this.client.users.cache.size
         };
     }
 
-    // ==================== EVENT FORWARDING METHODS ====================
-
-    onMessage(callback) {
-        this.on('message', callback);
-    }
-
-    onCommand(callback) {
-        this.on('command', callback);
-    }
-
-    onSlashCommand(callback) {
-        this.on('slashCommand', callback);
-    }
-
-    onConnection(callback) {
-        this.on('connection', callback);
-    }
-
-    onError(callback) {
-        this.on('error', callback);
-    }
-
-    onMemberJoin(callback) {
-        this.on('memberJoin', callback);
-    }
-
-    onMemberLeave(callback) {
-        this.on('memberLeave', callback);
+    getClient() {
+        return this.client;
     }
 }
 

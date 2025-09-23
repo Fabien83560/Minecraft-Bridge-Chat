@@ -34,6 +34,11 @@ module.exports = {
 	logBridgeMessage: (from, to, username, message) => logger.logBridgeMessage(from, to, username, message),
 	logDiscordCommand: (userId, command, guildId) => logger.logDiscordCommand(userId, command, guildId),
 	
+	getRecentLogs: (lines) => { const fileLogger = logger.fileLogger; return fileLogger ? fileLogger.getRecentLogs(lines) : []; },
+	getRecentErrorLogs: (lines) => { const fileLogger = logger.fileLogger; return fileLogger ? fileLogger.getRecentErrorLogs(lines) : []; },
+	getCurrentLogFiles: () => { const fileLogger = logger.fileLogger; return fileLogger ? fileLogger.getCurrentLogFiles() : { main: null, errors: null }; },
+	getLogStats: () => { const fileLogger = logger.fileLogger; return fileLogger ? fileLogger.getLogStats() : { main: { exists: false, size: 0 }, errors: { exists: false, size: 0 } }; },
+	
 	// Access to full instance if needed
 	getInstance: () => logger,
 	

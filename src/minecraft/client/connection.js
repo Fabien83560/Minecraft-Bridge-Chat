@@ -433,14 +433,6 @@ class MinecraftConnection {
         }
 
         try {
-            // Check if command is allowed
-            const allowedCommands = this._guildConfig.commands?.allowedCommands || [];
-            const commandName = command.split(' ')[0].replace('/', '');
-            
-            if (!allowedCommands.includes(commandName)) {
-                throw new Error(`Command '${commandName}' is not allowed for ${this._guildConfig.name}`);
-            }
-
             this._bot.chat(command);        
         } catch (error) {
             logger.logError(error, `Failed to execute command for ${this._guildConfig.name}`);

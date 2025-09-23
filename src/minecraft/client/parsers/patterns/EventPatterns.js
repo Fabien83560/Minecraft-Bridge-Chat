@@ -497,67 +497,11 @@ class EventPatterns {
     }
 
     /**
-     * Test event matching (for debugging)
-     * @param {string} messageText - Message to test
-     * @returns {object} Test results
-     */
-    testEventMatching(messageText) {
-        const results = {
-            originalText: messageText,
-            serverType: this.serverType,
-            cleanedText: this.cleanMessageForMatching(messageText),
-            matchedEvent: this.matchEvent(messageText),
-            eventType: this.getEventType(messageText),
-            isEvent: this.isGuildEvent(messageText),
-            availableEventTypes: this.patternLoader.getEventTypes(this.serverType),
-            totalPatterns: this.getTotalPatternCount()
-        };
-
-        if (results.matchedEvent) {
-            results.matchedPattern = results.matchedEvent.patternIndex;
-            results.groups = results.matchedEvent.groups;
-            results.description = results.matchedEvent.description;
-        }
-
-        return results;
-    }
-
-    /**
      * Clear pattern cache
      */
     clearCache() {
         this.patternCache.clear();
         logger.debug('EventPatterns cache cleared');
-    }
-
-    /**
-     * Get pattern statistics
-     * @returns {object} Pattern statistics
-     */
-    getStatistics() {
-        const eventTypes = this.patternLoader.getEventTypes(this.serverType);
-        const stats = {
-            serverType: this.serverType,
-            eventTypes: eventTypes,
-            patternCounts: {},
-            totalPatterns: 0,
-            customPatterns: 0
-        };
-
-        eventTypes.forEach(eventType => {
-            const patterns = this.getEventPatterns(eventType);
-            const customCount = patterns.filter(p => p.custom).length;
-            
-            stats.patternCounts[eventType] = {
-                total: patterns.length,
-                custom: customCount
-            };
-            
-            stats.totalPatterns += patterns.length;
-            stats.customPatterns += customCount;
-        });
-
-        return stats;
     }
 }
 

@@ -29,19 +29,6 @@ class InterGuildManager {
         this.messageHistory = new Map(); // guildId -> recent messages
         this.historySize = 10; // Keep last 10 messages per guild
 
-        // Statistics
-        this.stats = {
-            messagesProcessed: 0,
-            officerMessagesProcessed: 0,
-            eventsProcessed: 0,
-            messagesDropped: 0,
-            rateLimitHits: 0,
-            duplicatesDropped: 0,
-            loopsDetected: 0,
-            errors: 0,
-            sameGuildPrevented: 0
-        };
-
         this.initialize();
     }
 
@@ -119,7 +106,6 @@ class InterGuildManager {
 
         try {
             if (this.isMessageLoopOrDuplicate(messageData, sourceGuildConfig)) {
-                this.stats.loopsDetected++;
                 return;
             }
 
@@ -151,7 +137,6 @@ class InterGuildManager {
 
             // Check rate limiting
             if (this.isRateLimited(sourceGuildConfig.id)) {
-                this.stats.rateLimitHits++;
                 logger.debug(`[${sourceGuildConfig.name}] Message rate limited`);
                 return;
             }
@@ -183,11 +168,9 @@ class InterGuildManager {
 
             // Update rate limiting
             this.updateRateLimit(sourceGuildConfig.id);
-            this.stats.messagesProcessed++;
 
         } catch (error) {
             logger.logError(error, `Error processing inter-guild message from ${sourceGuildConfig.name}`);
-            this.stats.errors++;
         }
     }
 
@@ -216,7 +199,6 @@ class InterGuildManager {
 
             // Check rate limiting
             if (this.isRateLimited(sourceGuildConfig.id)) {
-                this.stats.rateLimitHits++;
                 logger.debug(`[${sourceGuildConfig.name}] Officer message rate limited`);
                 return;
             }
@@ -247,11 +229,9 @@ class InterGuildManager {
 
             // Update rate limiting
             this.updateRateLimit(sourceGuildConfig.id);
-            this.stats.officerMessagesProcessed++;
 
         } catch (error) {
             logger.logError(error, `Error processing inter-guild officer message from ${sourceGuildConfig.name}`);
-            this.stats.errors++;
         }
     }
 
@@ -331,7 +311,6 @@ class InterGuildManager {
                 hashData.guilds.add(sourceGuildConfig.id);
                 
                 if (hashData.count > this.maxDuplicatesPerWindow) {
-                    this.stats.duplicatesDropped++;
                     logger.debug(`[${sourceGuildConfig.name}] ✅ FILTERED ${chatType} hash duplicate (count: ${hashData.count}): "${message.substring(0, 30)}..."`);
                     return true;
                 }
@@ -466,7 +445,6 @@ class InterGuildManager {
                 // CRITICAL FIX: Double-check that we're not sending to the same guild
                 if (this.isSameGuild(sourceGuildConfig, targetGuildConfig)) {
                     logger.warn(`[INTER-GUILD] PREVENTED: Attempted to send event ${eventData.type} from ${sourceGuildConfig.name} back to itself!`);
-                    this.stats.sameGuildPrevented++;
                     continue;
                 }
 
@@ -487,12 +465,8 @@ class InterGuildManager {
                     logger.logError(error, `Failed to send event to Discord from ${sourceGuildConfig.name}`);
                 }
             }
-
-            this.stats.eventsProcessed++;
-
         } catch (error) {
             logger.logError(error, `Error processing inter-guild event from ${sourceGuildConfig.name}`);
-            this.stats.errors++;
         }
     }
 
@@ -521,7 +495,6 @@ class InterGuildManager {
             // CRITICAL FIX: Additional safety check to prevent sending to same guild
             if (this.isSameGuild(sourceGuildConfig, targetGuildConfig)) {
                 logger.warn(`[INTER-GUILD] PREVENTED: Attempted to send message from ${sourceGuildConfig.name} back to itself!`);
-                this.stats.sameGuildPrevented++;
                 return;
             }
 
@@ -571,7 +544,6 @@ class InterGuildManager {
             // CRITICAL FIX: Additional safety check to prevent sending to same guild
             if (this.isSameGuild(sourceGuildConfig, targetGuildConfig)) {
                 logger.warn(`[INTER-GUILD] PREVENTED: Attempted to send officer message from ${sourceGuildConfig.name} back to itself!`);
-                this.stats.sameGuildPrevented++;
                 return;
             }
 
@@ -621,7 +593,6 @@ class InterGuildManager {
             // CRITICAL FIX: Additional safety check to prevent sending to same guild
             if (this.isSameGuild(sourceGuildConfig, targetGuildConfig)) {
                 logger.warn(`[INTER-GUILD] PREVENTED: Attempted to send event ${eventData.type} from ${sourceGuildConfig.name} back to itself!`);
-                this.stats.sameGuildPrevented++;
                 return;
             }
 
@@ -717,7 +688,6 @@ class InterGuildManager {
             if (messageItem.sourceGuildId && messageItem.targetGuildId && 
                 messageItem.sourceGuildId === messageItem.targetGuildId) {
                 logger.error(`[INTER-GUILD] FINAL BLOCK: Prevented sending ${messageItem.type} from ${messageItem.sourceGuild} to itself at delivery time!`);
-                this.stats.sameGuildPrevented++;
                 return;
             }
 
@@ -732,7 +702,6 @@ class InterGuildManager {
                     return;
                 } else {
                     logger.warn(`[${messageItem.targetGuild}] Max attempts reached, dropping message`);
-                    this.stats.messagesDropped++;
                     return;
                 }
             }
@@ -754,7 +723,6 @@ class InterGuildManager {
                 }, 2000 * messageItem.attempts); // Exponential backoff
             } else {
                 logger.logError(error, `[${messageItem.targetGuild}] Max attempts reached, dropping message`);
-                this.stats.messagesDropped++;
             }
         }
     }
@@ -839,37 +807,6 @@ class InterGuildManager {
     }
 
     /**
-     * Get current statistics
-     * @returns {object} Current statistics
-     */
-    getStatistics() {
-        return {
-            ...this.stats,
-            queueSize: this.messageQueue.length,
-            rateLimiterSize: this.rateLimiter.size,
-            isProcessingQueue: this.isProcessingQueue,
-            antiLoop: {
-                messageHashes: this.messageHashes.size,
-                guildHistories: this.messageHistory.size,
-                duplicatesDropped: this.stats.duplicatesDropped,
-                loopsDetected: this.stats.loopsDetected,
-                sameGuildPrevented: this.stats.sameGuildPrevented
-            },
-            config: {
-                enabled: this.interGuildConfig.enabled,
-                officerToGuildChat: this.interGuildConfig.officerToGuildChat,
-                officerToOfficerChat: this.interGuildConfig.officerToOfficerChat,
-                showTags: this.interGuildConfig.showTags,
-                showSourceTag: this.interGuildConfig.showSourceTag
-            },
-            discordIntegration: {
-                available: !!this._discordManager,
-                connected: this._discordManager ? this._discordManager.isConnected() : false
-            }
-        };
-    }
-
-    /**
      * Clear rate limiter
      */
     clearRateLimit() {
@@ -892,24 +829,6 @@ class InterGuildManager {
         this.messageHashes.clear();
         this.messageHistory.clear();
         logger.debug('InterGuildManager anti-loop data cleared');
-    }
-
-    /**
-     * Test message formatting
-     * @param {object} testData - Test data
-     * @returns {object} Test results
-     */
-    testMessageFormatting(testData) {
-        if (!this.messageFormatter) {
-            return { error: 'MessageFormatter not initialized' };
-        }
-
-        return this.messageFormatter.testFormatting(
-            'messagesToMinecraft',
-            'Hypixel',
-            'guild',
-            testData
-        );
     }
 
     /**

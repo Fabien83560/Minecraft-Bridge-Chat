@@ -77,9 +77,18 @@ async function handleInviteCommand(interaction, context) {
             return;
         }
 
+        const command = `/g invite ${username}`;
+
         // Set up command response listener
         const responseListener = getCommandResponseListener();
-        const listenerId = responseListener.createListener(guildConfig.id, 'invite', username, 15000, interaction);
+        const listenerId = responseListener.createListener(
+            guildConfig.id,
+            'invite',
+            username,
+            15000,
+            command,
+            interaction
+        );
 
         // Send initial response
         const initialEmbed = new EmbedBuilder()
@@ -96,8 +105,6 @@ async function handleInviteCommand(interaction, context) {
         await interaction.editReply({ embeds: [initialEmbed] });
 
         try {
-            // Execute the invite command on Minecraft
-            const command = `/g invite ${username}`;
             await botManager.executeCommand(guildConfig.id, command);
             
             logger.discord(`[GUILD-INVITE] Command sent to ${guildName}: ${command}`);

@@ -153,7 +153,8 @@
             "invite": "INVITE_LOG_CHANNEL_ID",
             "kick": "KICK_LOG_CHANNEL_ID",
             "promote": "PROMOTE_LOG_CHANNEL_ID",
-            "demote": "DEMOTE_LOG_CHANNEL_ID"
+            "demote": "DEMOTE_LOG_CHANNEL_ID",
+            "setrank": "SETRANK_LOG_CHANNEL_ID"
         }
     },
     "features": {

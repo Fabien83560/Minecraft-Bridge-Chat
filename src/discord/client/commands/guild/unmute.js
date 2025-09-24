@@ -83,7 +83,7 @@ async function handleUnmuteCommand(interaction, context) {
     // Construct the appropriate command
     let command;
     if (scope === "global") {
-      command = `/g unmute`;
+      command = `/g unmute everyone`;
     } else {
       command = `/g unmute ${username}`;
     }
@@ -93,7 +93,8 @@ async function handleUnmuteCommand(interaction, context) {
     const listenerId = responseListener.createListener(
       guildConfig.id,
       "unmute",
-      username || "global",
+      username || "everyone",
+      command,
       15000, // 15 second timeout
       interaction
     );

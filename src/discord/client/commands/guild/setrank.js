@@ -80,11 +80,14 @@ async function handleSetRankCommand(interaction, context) {
       return;
     }
 
+    const command = `/g setrank ${username} ${rank}`;
+
     const responseListener = getCommandResponseListener();
     const listenerId = responseListener.createListener(
       guildConfig.id,
       "setrank",
       username,
+      command,
       15000,
       interaction
     );
@@ -110,7 +113,6 @@ async function handleSetRankCommand(interaction, context) {
     await interaction.editReply({ embeds: [initialEmbed] });
 
     try {
-      const command = `/g setrank ${username} ${rank}`;
       await botManager.executeCommand(guildConfig.id, command);
       logger.discord(
         `[GUILD-SETRANK] Command sent to ${guildName}: ${command}`

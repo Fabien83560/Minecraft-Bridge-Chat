@@ -70,11 +70,14 @@ async function handlePromoteCommand(interaction, context) {
       return;
     }
 
+    const command = `/g promote ${username}`;
+
     const responseListener = getCommandResponseListener();
     const listenerId = responseListener.createListener(
       guildConfig.id,
       "promote",
       username,
+      command,
       15000,
       interaction
     );
@@ -97,7 +100,6 @@ async function handlePromoteCommand(interaction, context) {
     await interaction.editReply({ embeds: [initialEmbed] });
 
     try {
-      const command = `/g promote ${username}`;
       await botManager.executeCommand(guildConfig.id, command);
       logger.discord(
         `[GUILD-PROMOTE] Command sent to ${guildName}: ${command}`

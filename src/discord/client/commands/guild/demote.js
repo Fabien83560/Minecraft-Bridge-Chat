@@ -68,11 +68,14 @@ async function handleDemoteCommand(interaction, context) {
       return;
     }
 
+    const command = `/g demote ${username}`;
+
     const responseListener = getCommandResponseListener();
     const listenerId = responseListener.createListener(
       guildConfig.id,
       "demote",
       username,
+      command,
       15000,
       interaction
     );
@@ -91,7 +94,6 @@ async function handleDemoteCommand(interaction, context) {
     await interaction.editReply({ embeds: [initialEmbed] });
 
     try {
-      const command = `/g demote ${username}`;
       await botManager.executeCommand(guildConfig.id, command);
       logger.discord(`[GUILD-DEMOTE] Command sent to ${guildName}: ${command}`);
 

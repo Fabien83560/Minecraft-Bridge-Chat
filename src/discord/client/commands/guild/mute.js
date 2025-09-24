@@ -84,7 +84,7 @@ async function handleMuteCommand(interaction, context) {
     // Validate time format
     if (!isValidTimeFormat(time)) {
       await interaction.editReply({
-        content: "❌ Invalid time format. Use formats like: 1h, 30m, 2d, 1h30m, etc.",
+        content: "❌ Invalid time format. Use formats like: 1h, 30m, 2d, etc.",
         ephemeral: true,
       });
       return;
@@ -103,7 +103,8 @@ async function handleMuteCommand(interaction, context) {
     const listenerId = responseListener.createListener(
       guildConfig.id,
       "mute",
-      username || "global",
+      username || "everyone",
+      command,
       15000, // 15 second timeout
       interaction
     );

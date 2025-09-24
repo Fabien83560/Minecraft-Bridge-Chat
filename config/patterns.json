@@ -1036,12 +1036,12 @@
           "mute": {
             "success": [
               {
-                "pattern": "\\[.+\\] (\\w+) has muted \\[.+\\] (\\w+) for (.+)",
+                "pattern": "\\[.+?\\] ([\\w_]+) has muted \\[.+?\\] ([\\w_]+) for (.+)",
                 "groups": ["usernameMuter", "usernameMuted", "duration"],
                 "description": "Player muted successfully"
               },
               {
-                "pattern": "\\[.+\\] (\\w+) has muted the guild chat for (.+)",
+                "pattern": "\\[.+?\\] ([\\w_]+) has muted the guild chat for (.+)",
                 "groups": ["usernameMuter", "duration"],
                 "description": "Guild muted successfully"
               }
@@ -1068,12 +1068,12 @@
                 "description": "Player already muted"
               },
               {
-                "pattern": "\\[.+\\] (\\w+) is not in your guild!",
+                "pattern": "\\[.+?\\] ([\\w_]+) is not in your guild!",
                 "groups": ["username"],
                 "description": "Player not in your guild"
               },
               {
-                "pattern": "Can't find a player by the name of '(\\w+)'",
+                "pattern": "Can't find a player by the name of '([\\w_]+)'",
                 "groups": ["username"],
                 "description": "Can't find this player name"
               },
@@ -1092,12 +1092,12 @@
           "unmute": {
             "success": [
               {
-                "pattern": "\\[.+\\] (\\w+) has unmuted \\[.+\\] (\\w+)",
+                "pattern": "\\[.+?\\] ([\\w_]+) has unmuted \\[.+?\\] ([\\w_]+)",
                 "groups": ["usernameUnMuter", "usernameunMuted"],
                 "description": "Player unmuted successfully"
               },
               {
-                "pattern": "\\[.+\\] (\\w+) has unmuted the guild chat!",
+                "pattern": "\\[.+?\\] ([\\w_]+) has unmuted the guild chat!",
                 "groups": ["usernameUnMuter"],
                 "description": "Guild unmuted successfully"
               }
@@ -1114,12 +1114,12 @@
                 "description": "Player not muted"
               },
               {
-                "pattern": "\\[.+\\] (\\w+) is not in your guild!",
+                "pattern": "\\[.+?\\] ([\\w_]+) is not in your guild!",
                 "groups": ["username"],
                 "description": "Player not in your guild"
               },
               {
-                "pattern": "Can't find a player by the name of '(\\w+)'",
+                "pattern": "Can't find a player by the name of '([\\w_]+)'",
                 "groups": ["username"],
                 "description": "Can't find this player name"
               },

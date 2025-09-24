@@ -78,9 +78,18 @@ async function handleKickCommand(interaction, context) {
             return;
         }
 
+        const command = `/g kick ${username} ${reason}`;
+
         // Set up command response listener
         const responseListener = getCommandResponseListener();
-        const listenerId = responseListener.createListener(guildConfig.id, 'kick', username, 15000, interaction);
+        const listenerId = responseListener.createListener(
+            guildConfig.id,
+            'kick',
+            username,
+            command,
+            15000,
+            interaction
+        );
 
         // Send initial response
         const initialEmbed = new EmbedBuilder()
@@ -98,9 +107,6 @@ async function handleKickCommand(interaction, context) {
         await interaction.editReply({ embeds: [initialEmbed] });
 
         try {
-            // Execute the kick command on Minecraft with reason if provided
-            const command = `/g kick ${username} ${reason}`;
-            
             await botManager.executeCommand(guildConfig.id, command);
             
             logger.discord(`[GUILD-KICK] Command sent to ${guildName}: ${command}`);

@@ -49,8 +49,13 @@ class CommandResponseListener extends EventEmitter {
                 if (patterns.success) {
                     for (const patternConfig of patterns.success) {
                         try {
+                            // Use flags from pattern config, default to 'i' for case insensitive
                             const regex = new RegExp(patternConfig.pattern, 'i');
-                            this.responsePatterns[commandType].success.push(regex);
+                            this.responsePatterns[commandType].success.push({
+                                pattern: regex,
+                                groups: patternConfig.groups || [],
+                                description: patternConfig.description || 'No description'
+                            });
                         } catch (error) {
                             logger.logError(error, `Failed to compile success pattern for ${commandType}: ${patternConfig.pattern}`);
                         }
@@ -61,8 +66,13 @@ class CommandResponseListener extends EventEmitter {
                 if (patterns.error) {
                     for (const patternConfig of patterns.error) {
                         try {
+                            // Use flags from pattern config, default to 'i' for case insensitive
                             const regex = new RegExp(patternConfig.pattern, 'i');
-                            this.responsePatterns[commandType].error.push(regex);
+                            this.responsePatterns[commandType].error.push({
+                                pattern: regex,
+                                groups: patternConfig.groups || [],
+                                description: patternConfig.description || 'No description'
+                            });
                         } catch (error) {
                             logger.logError(error, `Failed to compile error pattern for ${commandType}: ${patternConfig.pattern}`);
                         }
@@ -86,12 +96,13 @@ class CommandResponseListener extends EventEmitter {
      * @param {object} interaction - Discord interaction object (optional)
      * @returns {string} Listener ID
      */
-    createListener(guildId, commandType, targetPlayer, timeoutMs = 10000, interaction = null) {
+    createListener(guildId, commandType, targetPlayer, command, timeoutMs = 10000, interaction = null) {
         const listenerId = `cmd_${++this.listenerCounter}_${Date.now()}`;
         
         const listener = {
             id: listenerId,
             guildId: guildId,
+            command: command,
             commandType: commandType.toLowerCase(),
             targetPlayer: targetPlayer.toLowerCase(),
             createdAt: Date.now(),
@@ -198,8 +209,11 @@ class CommandResponseListener extends EventEmitter {
             return;
         }
 
-        // Convert message to string
+        // Convert message to string and clean it
         const messageText = message.toString ? message.toString() : String(message);
+        const cleanMessage = messageText.replace(/§[0-9a-fklmnor]/g, '').trim();
+        
+        logger.debug(`[${listenerId}] Processing raw message: "${cleanMessage}"`);
         
         // Ensure patterns exist for this command type
         if (!this.responsePatterns || !this.responsePatterns[listener.commandType]) {
@@ -209,55 +223,83 @@ class CommandResponseListener extends EventEmitter {
         
         const patterns = this.responsePatterns[listener.commandType];
 
-        logger.debug(`Checking raw message for listener ${listenerId}: "${messageText}"`);
-
         // Check for success patterns
         if (patterns.success && Array.isArray(patterns.success)) {
-            for (const pattern of patterns.success) {
-                const match = messageText.match(pattern);
+            for (let i = 0; i < patterns.success.length; i++) {
+                const patternObj = patterns.success[i];
+                const match = cleanMessage.match(patternObj.pattern);
+                
                 if (match) {
-                    const extractedPlayer = match[1] ? match[1].toLowerCase() : null;
+                    logger.debug(`[${listenerId}] Success pattern ${i} matched: ${patternObj.description}`);
+                    logger.debug(`[${listenerId}] Match groups:`, match.slice(1));
                     
-                    // Verify the player matches (if we can extract it)
-                    if (!extractedPlayer || extractedPlayer === listener.targetPlayer) {
+                    // Apply command-specific validation
+                    let isValidMatch = false;
+                    
+                    if (listener.commandType === 'mute' || listener.commandType === 'unmute') {
+                        if (listener.targetPlayer === 'everyone') {
+                            // For global commands, check if it's a guild-wide pattern
+                            isValidMatch = cleanMessage.includes('guild chat');
+                            logger.debug(`[${listenerId}] Global command - guild chat check: ${isValidMatch}`);
+                        } else {
+                            // For player-specific commands, check if target matches
+                            const extractedTarget = match[2] ? match[2].toLowerCase() : null;
+                            isValidMatch = extractedTarget && extractedTarget === listener.targetPlayer.toLowerCase();
+                            logger.debug(`[${listenerId}] Player command - target "${extractedTarget}" vs "${listener.targetPlayer}": ${isValidMatch}`);
+                        }
+                    } else {
+                        // For other command types, use original logic
+                        const extractedPlayer = match[1] ? match[1].toLowerCase() : null;
+                        isValidMatch = !extractedPlayer || extractedPlayer === listener.targetPlayer.toLowerCase();
+                        logger.debug(`[${listenerId}] Other command - player match: ${isValidMatch}`);
+                    }
+                    
+                    if (isValidMatch) {
+                        logger.debug(`[${listenerId}] ✅ Success pattern validated! Resolving listener.`);
                         this.resolveListener(listenerId, {
                             success: true,
-                            message: messageText,
+                            message: cleanMessage,
                             type: 'success',
                             extractedData: {
-                                player: extractedPlayer,
-                                fullMatch: match[0]
+                                fullMatch: match[0],
+                                groups: match.slice(1),
+                                patternDescription: patternObj.description
                             }
                         });
                         return;
+                    } else {
+                        logger.debug(`[${listenerId}] Pattern matched but validation failed - continuing to next pattern`);
                     }
+                } else {
+                    logger.debug(`[${listenerId}] Success pattern ${i} did not match`);
                 }
             }
         }
 
         // Check for error patterns
         if (patterns.error && Array.isArray(patterns.error)) {
-            for (const pattern of patterns.error) {
-                const match = messageText.match(pattern);
+            for (let i = 0; i < patterns.error.length; i++) {
+                const patternObj = patterns.error[i];
+                const match = cleanMessage.match(patternObj.pattern);
+                
                 if (match) {
-                    const extractedPlayer = match[1] ? match[1].toLowerCase() : null;
-                    
-                    // Verify the player matches (if we can extract it)
-                    if (!extractedPlayer || extractedPlayer === listener.targetPlayer) {
-                        this.resolveListener(listenerId, {
-                            success: false,
-                            error: messageText,
-                            type: 'command_error',
-                            extractedData: {
-                                player: extractedPlayer,
-                                fullMatch: match[0]
-                            }
-                        });
-                        return;
-                    }
+                    logger.debug(`[${listenerId}] ❌ Error pattern ${i} matched: ${patternObj.description}`);
+                    this.resolveListener(listenerId, {
+                        success: false,
+                        error: cleanMessage,
+                        type: 'command_error',
+                        extractedData: {
+                            fullMatch: match[0],
+                            groups: match.slice(1),
+                            patternDescription: patternObj.description
+                        }
+                    });
+                    return;
                 }
             }
         }
+        
+        logger.debug(`[${listenerId}] No patterns matched for message: "${cleanMessage}"`);
     }
 
     /**
@@ -266,81 +308,9 @@ class CommandResponseListener extends EventEmitter {
      * @param {object} messageData - Message data from Minecraft
      */
     handleMessage(listenerId, messageData) {
-        const listener = this.activeListeners.get(listenerId);
-        
-        if (!listener || listener.resolved) {
-            return;
-        }
-
-        // Only process messages from the correct guild
-        if (messageData.guildId !== listener.guildId) {
-            return;
-        }
-
-        // Only process system messages (not player chat)
-        if (messageData.username && messageData.username !== 'System') {
-            return;
-        }
-
+        // Just delegate to handleRawMessage for consistency
         const message = messageData.message || messageData.toString();
-        
-        // Ensure patterns exist for this command type
-        if (!this.responsePatterns || !this.responsePatterns[listener.commandType]) {
-            logger.warn(`No response patterns found for command type: ${listener.commandType}`);
-            return;
-        }
-        
-        const patterns = this.responsePatterns[listener.commandType];
-
-        logger.debug(`Checking message for listener ${listenerId}: "${message}"`);
-
-        // Check for success patterns
-        if (patterns.success && Array.isArray(patterns.success)) {
-            for (const pattern of patterns.success) {
-                const match = message.match(pattern);
-                if (match) {
-                    const extractedPlayer = match[1] ? match[1].toLowerCase() : null;
-                    
-                    // Verify the player matches (if we can extract it)
-                    if (!extractedPlayer || extractedPlayer === listener.targetPlayer) {
-                        this.resolveListener(listenerId, {
-                            success: true,
-                            message: message,
-                            type: 'success',
-                            extractedData: {
-                                player: extractedPlayer,
-                                fullMatch: match[0]
-                            }
-                        });
-                        return;
-                    }
-                }
-            }
-        }
-
-        // Check for error patterns
-        if (patterns.error && Array.isArray(patterns.error)) {
-            for (const pattern of patterns.error) {
-                const match = message.match(pattern);
-                if (match) {
-                    const extractedPlayer = match[1] ? match[1].toLowerCase() : null;
-                    
-                    // Verify the player matches (if we can extract it)
-                    if (!extractedPlayer || extractedPlayer === listener.targetPlayer) {
-                        this.resolveListener(listenerId, {
-                            success: false,
-                            error: message,
-                            type: 'command_error',
-                            extractedData: {
-                                player: extractedPlayer,
-                                fullMatch: match[0]
-                            }
-                        });
-                        return;
-                    }
-                }
-            }
-        }
+        this.handleRawMessage(listenerId, message, messageData.guildId);
     }
 
     /**
@@ -547,6 +517,7 @@ class CommandResponseListener extends EventEmitter {
                     { name: 'Guild', value: guildName, inline: true },
                     { name: 'Target Player', value: listener.targetPlayer, inline: true },
                     { name: 'Command Type', value: listener.commandType.toUpperCase(), inline: true },
+                    { name: 'Command', value: `\`${listener.command}\``, inline: true },
                     { name: 'Duration', value: `${result.duration || (Date.now() - listener.createdAt)}ms`, inline: true },
                     { name: 'Response', value: result.message || 'Command completed successfully', inline: false }
                 )

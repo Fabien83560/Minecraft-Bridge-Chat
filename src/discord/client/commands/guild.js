@@ -211,6 +211,61 @@ module.exports = {
                 .setDescription("Rank to set (case-insensitive)")
                 .setRequired(true)
             )
+    )
+    .addSubcommand(subcommand =>
+        subcommand
+            .setName('mute')
+            .setDescription('Mute a guild globally or a specific player')
+            .addStringOption(option =>
+                option.setName('guildname')
+                    .setDescription('Name of the guild')
+                    .setRequired(true)
+                    .setAutocomplete(true)
+            )
+            .addStringOption(option =>
+                option.setName('scope')
+                    .setDescription('Mute scope (global or player)')
+                    .setRequired(true)
+                    .addChoices(
+                        { name: 'global', value: 'global' },
+                        { name: 'player', value: 'player' }
+                    )
+            )
+            .addStringOption(option =>
+                option.setName('time')
+                    .setDescription('Mute duration (e.g. 1h, 30m, 2d)')
+                    .setRequired(true)
+            )
+            .addStringOption(option =>
+                option.setName('username')
+                    .setDescription('Username to mute (required only if scope is player)')
+                    .setRequired(false)
+            )
+    )
+    .addSubcommand(subcommand =>
+        subcommand
+            .setName('unmute')
+            .setDescription('Unmute a guild globally or a specific player')
+            .addStringOption(option =>
+                option.setName('guildname')
+                    .setDescription('Name of the guild')
+                    .setRequired(true)
+                    .setAutocomplete(true)
+            )
+            .addStringOption(option =>
+                option.setName('scope')
+                    .setDescription('Unmute scope (global or player)')
+                    .setRequired(true)
+                    .addChoices(
+                        { name: 'global', value: 'global' },
+                        { name: 'player', value: 'player' }
+                    )
+            )
+            .addStringOption(option =>
+                option.setName('username')
+                    .setDescription('Username to unmute (only if scope is player)')
+                    .setRequired(false)
+            )
     ),
     
     permission: 'user', // Base permission, subcommands can override

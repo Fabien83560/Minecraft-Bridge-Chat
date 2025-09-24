@@ -1032,6 +1032,103 @@
                 "description": "Player not in the guild"
               }
             ]
+          },
+          "mute": {
+            "success": [
+              {
+                "pattern": "\\[.+\\] (\\w+) has muted \\[.+\\] (\\w+) for (.+)",
+                "groups": ["usernameMuter", "usernameMuted", "duration"],
+                "description": "Player muted successfully"
+              },
+              {
+                "pattern": "\\[.+\\] (\\w+) has muted the guild chat for (.+)",
+                "groups": ["usernameMuter", "duration"],
+                "description": "Guild muted successfully"
+              }
+            ],
+            "error": [
+              {
+                "pattern": "Invalid usage! '/guild mute <player/everyone> <time>'",
+                "groups": [],
+                "description": "Invalid command usage"
+              },
+              {
+                "pattern": "You cannot mute someone for less than a minute",
+                "groups": [],
+                "description": "You cannot mute someone for less than a minute"
+              },
+              {
+                "pattern": "You cannot mute someone for more than one month",
+                "groups": [],
+                "description": "You cannot mute someone for more than one month"
+              },
+              {
+                "pattern": "This player is already muted!",
+                "groups": [],
+                "description": "Player already muted"
+              },
+              {
+                "pattern": "\\[.+\\] (\\w+) is not in your guild!",
+                "groups": ["username"],
+                "description": "Player not in your guild"
+              },
+              {
+                "pattern": "Can't find a player by the name of '(\\w+)'",
+                "groups": ["username"],
+                "description": "Can't find this player name"
+              },
+              {
+                "pattern": "You cannot mute a guild member with a higher guild rank!",
+                "groups": [],
+                "description": "You cannot mute a guild member with a higher guild rank"
+              },
+              {
+                "pattern": "You do not have permission to use this command!",
+                "groups": [],
+                "description": "You do not have permission to mute"
+              }
+            ]
+          },
+          "unmute": {
+            "success": [
+              {
+                "pattern": "\\[.+\\] (\\w+) has unmuted \\[.+\\] (\\w+)",
+                "groups": ["usernameUnMuter", "usernameunMuted"],
+                "description": "Player unmuted successfully"
+              },
+              {
+                "pattern": "\\[.+\\] (\\w+) has unmuted the guild chat!",
+                "groups": ["usernameUnMuter"],
+                "description": "Guild unmuted successfully"
+              }
+            ],
+            "error": [
+              {
+                "pattern": "Invalid usage! '/guild unmute <player/everyone>'",
+                "groups": [],
+                "description": "Invalid command usage"
+              },
+              {
+                "pattern": "This player is not muted!",
+                "groups": [],
+                "description": "Player not muted"
+              },
+              {
+                "pattern": "\\[.+\\] (\\w+) is not in your guild!",
+                "groups": ["username"],
+                "description": "Player not in your guild"
+              },
+              {
+                "pattern": "Can't find a player by the name of '(\\w+)'",
+                "groups": ["username"],
+                "description": "Can't find this player name"
+              },
+              {
+                "pattern": "You do not have permission to use this command!",
+                "groups": [],
+                "description": "You do not have permission to mute"
+              }
+            ]
           }
         }
       }

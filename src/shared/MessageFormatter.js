@@ -444,7 +444,7 @@ class MessageFormatter {
             case 'level':
                 return `${prefix}Guild reached level ${eventData.level}!`;
             default:
-                return `${prefix}Guild event: ${eventData.type}`;
+                return `unknown_event_type`;
         }
     }
 

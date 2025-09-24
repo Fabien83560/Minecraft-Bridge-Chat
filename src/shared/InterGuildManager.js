@@ -604,8 +604,8 @@ class InterGuildManager {
                 'messagesToMinecraft'
             );
 
-            if (!formattedMessage) {
-                logger.warn(`[${targetGuildConfig.name}] No formatted event generated for ${eventData.type}`);
+            if (!formattedMessage || formattedMessage === "unknown_event_type") {
+                logger.debug(`[${targetGuildConfig.name}] No formatted event generated for ${eventData.type}`);
                 return;
             }
 

@@ -223,8 +223,8 @@ class MessageSender {
             // Get formatted message
             const formattedMessage = this.messageFormatter.formatGuildEvent(eventData, guildConfig, guildConfig, 'messagesToDiscord');
 
-            if (!formattedMessage) {
-                logger.warn(`No formatted event message generated for Discord`);
+            if (!formattedMessage || formattedMessage === "unknown_event_type") {
+                logger.debug(`No formatted event message generated for Discord`);
                 return null;
             }
 

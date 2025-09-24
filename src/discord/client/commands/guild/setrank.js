@@ -3,6 +3,7 @@ const { EmbedBuilder } = require("discord.js");
 
 // Specific Imports
 const CommandResponseListener = require("../../handlers/CommandResponseListener.js");
+const BridgeLocator = require('../../../../bridgeLocator.js');
 const logger = require("../../../../shared/logger");
 
 let commandResponseListener = null;
@@ -190,14 +191,30 @@ function isValidMinecraftUsername(username) {
   return minecraftUsernameRegex.test(username);
 }
 
+/**
+ * Get valid ranks for a guild dynamically from configuration
+ * @param {string} guildName - Name of the guild
+ * @returns {Array<string>} - Array of valid ranks
+ */
 function getValidRanksForGuild(guildName) {
-  // Provided rank sets
-  const ranksFL1 = ["Membres", "Chomeur", "Negron", "Veteran"];
-  const ranksFL2 = ["Membres", "Paysan", "AFK", "Pauvre"];
-  if (/frenchlegacy\s*i+/i.test(guildName)) return ranksFL2;
-  if (/frenchlegacy\s*i(?!i)/i.test(guildName)) return ranksFL1;
-  // Default to union to allow reuse elsewhere
-  return Array.from(new Set([...ranksFL1, ...ranksFL2]));
+    try {
+        const guilds = BridgeLocator.getInstance().config.get("guilds") || [];
+        
+        const guild = guilds.find(g => 
+            g.name.toLowerCase() === guildName.toLowerCase() && g.enabled
+        );
+        
+        if (!guild) {
+            logger.warn(`Guild '${guildName}' not found in configuration`);
+            return [];
+        }
+        
+        return guild.ranks || [];
+        
+    } catch (error) {
+        logger.logError(error, `Error getting ranks for guild '${guildName}'`);
+        return [];
+    }
 }
 
 function createResponseEmbed(guildName, username, rank, result) {

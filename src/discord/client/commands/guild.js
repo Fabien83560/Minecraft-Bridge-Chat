@@ -209,6 +209,7 @@ module.exports = {
             option
                 .setName("rank")
                 .setDescription("Rank to set (case-insensitive)")
+                .setAutocomplete(true)
                 .setRequired(true)
             )
     )

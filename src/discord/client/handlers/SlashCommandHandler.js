@@ -253,6 +253,11 @@ class SlashCommandHandler extends EventEmitter {
                 await this.handleGuildNameAutocomplete(interaction, focusedOption.value);
                 return;
             }
+            // Handle guild rank autocomplete
+            if (focusedOption.name === 'rank' && interaction.commandName === 'guild') {
+                await this.handleRankAutocomplete(interaction, focusedOption.value);
+                return;
+            }
 
             // If command has custom autocomplete handler
             if (command.autocomplete) {
@@ -322,6 +327,98 @@ class SlashCommandHandler extends EventEmitter {
         } catch (error) {
             logger.logError(error, 'Error generating guild name autocomplete');
             await interaction.respond([]);
+        }
+    }
+
+    /**
+     * Handle rank autocomplete for setrank command
+     * @param {AutocompleteInteraction} interaction - Discord autocomplete interaction
+     * @param {string} query - Current input value
+     */
+    async handleRankAutocomplete(interaction, query) {
+        try {
+            // Get the currently selected guild name
+            const guildName = interaction.options.getString('guildname');
+            
+            if (!guildName) {
+                await interaction.respond([{
+                    name: 'Please select a guild first',
+                    value: 'no_guild'
+                }]);
+                return;
+            }
+
+            // Get valid ranks for the selected guild
+            const validRanks = this.getValidRanksForGuild(guildName);
+            
+            if (validRanks.length === 0) {
+                await interaction.respond([{
+                    name: 'No ranks available for this guild',
+                    value: 'no_ranks'
+                }]);
+                return;
+            }
+
+            // Filter ranks based on query (case insensitive)
+            const filteredRanks = validRanks.filter(rank => 
+                rank.toLowerCase().includes(query.toLowerCase())
+            );
+
+            // Create choices array (Discord limit: 25 choices max)
+            const choices = filteredRanks
+                .slice(0, 25)
+                .map(rank => ({
+                    name: rank,
+                    value: rank
+                }));
+
+            // If no matches and query is not empty, show all available ranks
+            if (choices.length === 0 && query.length > 0) {
+                const allRankChoices = validRanks
+                    .slice(0, 25)
+                    .map(rank => ({
+                        name: `${rank} (available)`,
+                        value: rank
+                    }));
+                
+                await interaction.respond(allRankChoices);
+                return;
+            }
+
+            await interaction.respond(choices);
+
+        } catch (error) {
+            logger.logError(error, 'Error generating rank autocomplete');
+            await interaction.respond([]);
+        }
+    }
+
+    /**
+     * Get valid ranks for a guild dynamically from configuration
+     * @param {string} guildName - Name of the guild
+     * @returns {Array<string>} - Array of valid ranks
+     */
+    getValidRanksForGuild(guildName) {
+        try {
+            // Get guilds configuration
+            const guilds = this.config.get("guilds") || [];
+            
+            // Find the guild by name (case insensitive)
+            const guild = guilds.find(g => 
+                g.name.toLowerCase() === guildName.toLowerCase() && g.enabled
+            );
+            
+            if (!guild) {
+                logger.warn(`Guild '${guildName}' not found in configuration`);
+                return [];
+            }
+            
+            // Return the ranks for this guild
+            return guild.ranks || [];
+            
+        } catch (error) {
+            logger.logError(error, `Error getting ranks for guild '${guildName}'`);
+            return [];
         }
     }
 

@@ -267,6 +267,22 @@ module.exports = {
                     .setDescription('Username to unmute (only if scope is player)')
                     .setRequired(false)
             )
+    )
+    .addSubcommand(subcommand =>
+        subcommand
+            .setName('execute')
+            .setDescription('Execute a custom guild command')
+            .addStringOption(option =>
+                option.setName('guildname')
+                    .setDescription('Name of the guild')
+                    .setRequired(true)
+                    .setAutocomplete(true)
+            )
+            .addStringOption(option =>
+                option.setName('command_to_execute')
+                    .setDescription('Command to execute (DO NOT include /g or /guild prefix)')
+                    .setRequired(true)
+            )
     ),
     
     permission: 'user', // Base permission, subcommands can override

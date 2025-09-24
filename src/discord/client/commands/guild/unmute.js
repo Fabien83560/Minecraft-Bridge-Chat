@@ -14,7 +14,7 @@ function getCommandResponseListener() {
 }
 
 module.exports = {
-  permission: "mod",
+  permission: "moderator",
 
   async execute(interaction, context) {
     await interaction.deferReply();

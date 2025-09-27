@@ -85,8 +85,8 @@ async function handleInviteCommand(interaction, context) {
             guildConfig.id,
             'invite',
             username,
-            15000,
             command,
+            15000,
             interaction
         );
 

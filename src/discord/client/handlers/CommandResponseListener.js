@@ -510,67 +510,77 @@ class CommandResponseListener extends EventEmitter {
 
             // Create embed for the log
             const { EmbedBuilder } = require('discord.js');
-            const embed = new EmbedBuilder()
-                .setTitle(`${this.capitalizeFirst(listener.commandType)} Command Executed`)
-                .setColor(0x00FF00) // Green for success
-                .addFields(
-                    { name: 'Guild', value: guildName, inline: true },
-                    { name: 'Target Player', value: listener.targetPlayer, inline: true },
-                    { name: 'Command Type', value: listener.commandType.toUpperCase(), inline: true },
-                    { name: 'Command', value: `\`${listener.command}\``, inline: true },
-                    { name: 'Duration', value: `${result.duration || (Date.now() - listener.createdAt)}ms`, inline: true },
-                    { name: 'Response', value: result.message || 'Command completed successfully', inline: false }
-                )
-                .setTimestamp()
-                .setFooter({ text: 'Guild Command System' });
 
-            // Add message link if interaction is available
+            // Determine status color and emoji based on result
+            const isSuccess = !result.error;
+            const statusColor = isSuccess ? 0x00FF00 : 0xFF0000; // Green for success, red for error
+            const statusEmoji = isSuccess ? '✅' : '❌';
+
+            const embed = new EmbedBuilder()
+                .setTitle(`${statusEmoji} ${this.capitalizeFirst(listener.commandType)} Command ${isSuccess ? 'Executed' : 'Failed'}`)
+                .setColor(statusColor)
+                .setTimestamp()
+                .setFooter({ text: '🔧 Guild Command System' });
+
+            // Add executor information first if available
             if (listener.interaction) {
                 try {
-                    // Create Discord message link
-                    const guildId = listener.interaction.guildId || listener.interaction.guild?.id;
-                    const channelId = listener.interaction.channelId || listener.interaction.channel?.id;
-                    const messageId = listener.interaction.id; // For slash commands, use interaction ID
-                    
-                    if (guildId && channelId) {
-                        // Try to get the actual message ID from the interaction
-                        let actualMessageId = messageId;
-                        
-                        // For slash commands, we need to get the reply message ID
-                        if (listener.interaction.replied) {
-                            try {
-                                const reply = await listener.interaction.fetchReply();
-                                if (reply && reply.id) {
-                                    actualMessageId = reply.id;
-                                }
-                            } catch (error) {
-                                // If we can't fetch the reply, use interaction ID as fallback
-                                logger.debug('Could not fetch interaction reply, using interaction ID');
-                            }
-                        }
-                        
-                        const messageLink = `https://discord.com/channels/${guildId}/${channelId}/${actualMessageId}`;
-                        
+                    const executor = listener.interaction.user;
+                    if (executor) {
                         embed.addFields({ 
-                            name: 'Original Command', 
-                            value: `[View Message](${messageLink})`, 
-                            inline: true 
+                            name: '👤 Executed By', 
+                            value: `<@${executor.id}> (**${executor.id}**)`, 
+                            inline: false 
                         });
-                        
-                        // Also add executor information
-                        const executor = listener.interaction.user;
-                        if (executor) {
-                            embed.addFields({ 
-                                name: 'Executed By', 
-                                value: `${executor.displayName || executor.username} (${executor.id})`, 
-                                inline: true 
-                            });
-                        }
                     }
                 } catch (error) {
-                    logger.debug('Could not create message link for command log', error);
+                    logger.debug('Could not retrieve interaction details for command log', error);
                 }
             }
+
+            // Fetch Minecraft UUID for target player
+            let targetPlayerValue = `\`${listener.targetPlayer}\``;
+            try {
+                const uuid = await fetchMinecraftUUID(listener.targetPlayer);
+                if (uuid) {
+                    // Format UUID with dashes (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
+                    const formattedUUID = uuid.replace(/(.{8})(.{4})(.{4})(.{4})(.{12})/, '$1-$2-$3-$4-$5');
+                    targetPlayerValue = `\`${listener.targetPlayer}\` • \`${formattedUUID}\``;
+                }
+            } catch (error) {
+                logger.debug(`Failed to fetch UUID for ${listener.targetPlayer}`, error);
+            }
+
+            // Add command details section
+            embed.addFields(
+                { 
+                    name: '🏰 Guild', 
+                    value: `**${guildName}**`, 
+                    inline: false 
+                },
+                { 
+                    name: '🎯 Target Player', 
+                    value: targetPlayerValue, 
+                    inline: false 
+                },
+                { 
+                    name: '💻 Command', 
+                    value: `${listener.command}`, 
+                    inline: false 
+                }
+            );
+
+            // Add response/error message
+            const responseTitle = isSuccess ? '📝 Response' : '⚠️ Error Details';
+            const responseValue = result.error 
+                ? `\`\`\`${result.error}\`\`\`` 
+                : (result.message || 'Command completed successfully');
+
+            embed.addFields({
+                name: responseTitle,
+                value: responseValue,
+                inline: false
+            });
 
             // Send the log message
             await channel.send({ embeds: [embed] });
@@ -680,6 +690,20 @@ class CommandResponseListener extends EventEmitter {
         this.removeAllListeners();
         logger.debug('CommandResponseListener cleaned up');
     }
+}
+
+// Function to fetch Minecraft UUID
+async function fetchMinecraftUUID(username) {
+    try {
+        const response = await fetch(`https://api.mojang.com/users/profiles/minecraft/${username}`);
+        if (response.ok) {
+            const data = await response.json();
+            return data.id;
+        }
+    } catch (error) {
+        logger.debug(`Could not fetch UUID for player ${username}`, error);
+    }
+    return null;
 }
 
 module.exports = CommandResponseListener;

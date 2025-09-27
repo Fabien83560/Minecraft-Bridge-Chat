@@ -61,8 +61,7 @@ class DiscordBot extends EventEmitter {
     }
 
     setupEventHandlers() {
-        // Ready event
-        this.client.on('ready', async () => {
+        this.client.on('clientReady', async () => {
             this._isConnected = true;
             this._isReady = true;
             

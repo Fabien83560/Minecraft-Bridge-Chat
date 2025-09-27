@@ -540,15 +540,17 @@ class CommandResponseListener extends EventEmitter {
 
             // Fetch Minecraft UUID for target player
             let targetPlayerValue = `\`${listener.targetPlayer}\``;
-            try {
-                const uuid = await fetchMinecraftUUID(listener.targetPlayer);
-                if (uuid) {
-                    // Format UUID with dashes (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
-                    const formattedUUID = uuid.replace(/(.{8})(.{4})(.{4})(.{4})(.{12})/, '$1-$2-$3-$4-$5');
-                    targetPlayerValue = `\`${listener.targetPlayer}\` • \`${formattedUUID}\``;
+            if(listener.targetPlayer != "everyone") {
+                try {
+                    const uuid = await fetchMinecraftUUID(listener.targetPlayer);
+                    if (uuid) {
+                        // Format UUID with dashes (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
+                        const formattedUUID = uuid.replace(/(.{8})(.{4})(.{4})(.{4})(.{12})/, '$1-$2-$3-$4-$5');
+                        targetPlayerValue = `\`${listener.targetPlayer}\` • \`${formattedUUID}\``;
+                    }
+                } catch (error) {
+                    logger.debug(`Failed to fetch UUID for ${listener.targetPlayer}`, error);
                 }
-            } catch (error) {
-                logger.debug(`Failed to fetch UUID for ${listener.targetPlayer}`, error);
             }
 
             // Add command details section

@@ -6,6 +6,7 @@ const EventEmitter = require('events');
 const BridgeLocator = require("../../bridgeLocator.js");
 const MessageHandler = require("./handlers/MessageHandler.js");
 const SlashCommandHandler = require("./handlers/SlashCommandHandler.js");
+const CommandDetectionHandler = require('./handlers/CommandDetectionHandler');
 
 const logger = require("../../shared/logger");
 
@@ -26,6 +27,7 @@ class DiscordBot extends EventEmitter {
         // Handlers
         this.messageHandler = null;
         this.slashCommandHandler = null;
+        this.commandDetectionHandler = null;
 
         this.initializeClient();
     }
@@ -46,6 +48,7 @@ class DiscordBot extends EventEmitter {
             // Initialize handlers (but don't initialize them with client yet)
             this.messageHandler = new MessageHandler();
             this.slashCommandHandler = new SlashCommandHandler();
+            this.commandDetectionHandler = new CommandDetectionHandler();
 
             this.setupEventHandlers();
             
@@ -224,6 +227,12 @@ class DiscordBot extends EventEmitter {
                 this.setupSlashCommandHandlerEvents();
                 
                 logger.debug('Slash command handler initialized and events setup');
+            }
+
+            // Initialize command detection handler
+            if (this.commandDetectionHandler) {
+                await this.commandDetectionHandler.initialize(this.client);
+                this.commandDetectionHandler.registerCommands(this.slashCommandHandler.commands);
             }
             logger.debug('All Discord bot handlers initialized');
 

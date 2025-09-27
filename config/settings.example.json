@@ -164,6 +164,12 @@
             "file": true,
             "logFileDirectory": "./data/logs"
         },
+        "detection": {
+            "channelId": "DETECTION_CHANNEL_ID",
+            "allowedUsers": [
+                "ALLOWED_USER_ID"
+            ]
+        },
         "messageSystem": {
             "enableDebugLogging": false,
             "validateTemplates": true,

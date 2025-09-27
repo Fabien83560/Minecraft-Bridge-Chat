@@ -12,7 +12,8 @@ module.exports = {
     async execute(interaction) {
         // Get the timestamp when the command was sent
         const sent = await interaction.reply({ 
-            content: 'Pinging...', 
+            content: 'Pinging...',
+            ephemeral: true,
             fetchReply: true 
         });
         
@@ -24,7 +25,9 @@ module.exports = {
         await interaction.editReply({
             content: `🏓 Pong!\n` +
                     `**Bot Latency:** ${latency}ms\n` +
-                    `**API Latency:** ${apiLatency}ms`
+                    `**API Latency:** ${apiLatency}ms`,
+            ephemeral: true,
+            fetchReply: true 
         });
     },
 };

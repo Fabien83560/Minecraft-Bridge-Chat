@@ -20,7 +20,7 @@ module.exports = {
     
     async execute(interaction, context) {
         // Defer the reply since this might take some time
-        await interaction.deferReply();
+        await interaction.deferReply({ ephemeral: true });
         
         await handleKickCommand(interaction, context);
     },

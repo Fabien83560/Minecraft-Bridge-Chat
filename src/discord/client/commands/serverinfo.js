@@ -11,7 +11,7 @@ module.exports = {
     
     async execute(interaction) {
         // Defer the reply to prevent timeout on large servers
-        await interaction.deferReply();
+        await interaction.deferReply({ ephemeral: true });
         
         const guild = interaction.guild;
         
@@ -111,7 +111,10 @@ module.exports = {
                 }
             }
 
-            await interaction.editReply({ embeds: [embed] });
+            await interaction.editReply({
+                embeds: [embed],
+                ephemeral: true
+            });
             
         } catch (error) {
             console.error('Error in serverinfo command:', error);

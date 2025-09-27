@@ -18,7 +18,7 @@ module.exports = {
   permission: "moderator",
 
   async execute(interaction, context) {
-    await interaction.deferReply();
+    await interaction.deferReply({ ephemeral: true });
     await handleSetRankCommand(interaction, context);
   },
 };

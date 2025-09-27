@@ -72,7 +72,7 @@ module.exports = {
     permission: 'admin',
 
     async execute(interaction, context) {
-        await interaction.deferReply();
+        await interaction.deferReply({ ephemeral: true });
         await handleExecuteCommand(interaction, context);
     }
 };

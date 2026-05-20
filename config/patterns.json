@@ -795,12 +795,12 @@
           "invite": {
             "success": [
               {
-                "pattern": "You invited \\[.+\\] (\\w+) to your guild\\. They have 5 minutes to accept\\.",
+                "pattern": "You invited (?:\\[.+\\] )?(\\w+) to your guild\\. They have 5 minutes to accept\\.",
                 "groups": ["username"],
-                "description": "Successful guild invite with 5 minute timer"
+                "description": "Successful guild invite with 5 minute timer (ranked or unranked player)"
               },
               {
-                "pattern": "You sent an offline invite to \\[.+\\] (\\w+)! They will have 5 minutes to accept once they come online!",
+                "pattern": "You sent an offline invite to (?:\\[.+\\] )?(\\w+)! They will have 5 minutes to accept once they come online!",
                 "groups": ["username"],
                 "description": "Successful offline guild invite"
               }

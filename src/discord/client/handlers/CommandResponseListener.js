@@ -654,7 +654,7 @@ class CommandResponseListener extends EventEmitter {
         }
 
         // Only process relevant event types
-        if (eventData.type !== listener.commandType) {
+        if (!this.isEventMatchingCommand(eventData, listener)) {
             return;
         }
 

@@ -358,6 +358,41 @@
             "pattern": "^§2Guild Chat > §r(\\w+)§r: (.+)$",
             "groups": ["username", "message"],
             "description": "Alternative guild chat with color codes"
+          },
+          {
+            "pattern": "^Guild > (?!.+(?:joined|left)\\.$)(\\w+) \\[.*?\\]: (.+)$",
+            "groups": ["username", "message"],
+            "description": "Hypixel guild chat without server rank but with guild rank"
+          },
+          {
+            "pattern": "^G > (?!.+(?:joined|left)\\.$)(\\w+) \\[.*?\\]: (.+)$",
+            "groups": ["username", "message"],
+            "description": "Hypixel short guild chat without server rank but with guild rank"
+          },
+          {
+            "pattern": "^Guild > (?!.+(?:joined|left)\\.$)(\\w+) \\[([^\\]]+)\\]: (.+)$",
+            "groups": ["username", "guildRank", "message"],
+            "description": "Hypixel guild chat without server rank but with guild rank (captured)"
+          },
+          {
+            "pattern": "^§2Guild > §r(?!.+(?:joined|left)\\.$)(\\w+)§r \\[([^\\]§]+)§r\\]: (.+)$",
+            "groups": ["username", "guildRank", "message"],
+            "description": "Hypixel guild chat without server rank but with guild rank (color codes)"
+          },
+          {
+            "pattern": "^§aGuild > §r(?!.+(?:joined|left)\\.$)(\\w+)§r \\[([^\\]§]+)§r\\]: (.+)$",
+            "groups": ["username", "guildRank", "message"],
+            "description": "Hypixel guild chat without server rank but with guild rank (alt color codes)"
+          },
+          {
+            "pattern": "^§2G > §r(?!.+(?:joined|left)\\.$)(\\w+)§r \\[([^\\]§]+)§r\\]: (.+)$",
+            "groups": ["username", "guildRank", "message"],
+            "description": "Hypixel short guild chat without server rank but with guild rank (color codes)"
+          },
+          {
+            "pattern": "^§aG > §r(?!.+(?:joined|left)\\.$)(\\w+)§r \\[([^\\]§]+)§r\\]: (.+)$",
+            "groups": ["username", "guildRank", "message"],
+            "description": "Hypixel short guild chat without server rank but with guild rank (alt color codes)"
           }
         ],
         "officer": [
@@ -405,6 +440,36 @@
             "pattern": "^§3Officer > §r\\[([^\\]§]+)§r\\] §r(\\w+)§r \\[([^\\]§]+)§r\\]: (.+)$",
             "groups": ["rank1", "username", "rank2", "message"],
             "description": "Officer chat with multiple ranks and color codes"
+          },
+          {
+            "pattern": "^Officer > (\\w+) \\[.*?\\]: (.+)$",
+            "groups": ["username", "message"],
+            "description": "Officer chat without server rank but with guild rank"
+          },
+          {
+            "pattern": "^O > (\\w+) \\[.*?\\]: (.+)$",
+            "groups": ["username", "message"],
+            "description": "Short officer chat without server rank but with guild rank"
+          },
+          {
+            "pattern": "^Officer > (\\w+) \\[([^\\]]+)\\]: (.+)$",
+            "groups": ["username", "guildRank", "message"],
+            "description": "Officer chat without server rank but with guild rank (captured)"
+          },
+          {
+            "pattern": "^§3Officer > §r(\\w+)§r \\[([^\\]§]+)§r\\]: (.+)$",
+            "groups": ["username", "guildRank", "message"],
+            "description": "Officer chat without server rank but with guild rank (color codes)"
+          },
+          {
+            "pattern": "^§bOfficer > §r(\\w+)§r \\[([^\\]§]+)§r\\]: (.+)$",
+            "groups": ["username", "guildRank", "message"],
+            "description": "Officer chat without server rank but with guild rank (alt color codes)"
+          },
+          {
+            "pattern": "^§3O > §r(\\w+)§r \\[([^\\]§]+)§r\\]: (.+)$",
+            "groups": ["username", "guildRank", "message"],
+            "description": "Short officer chat without server rank but with guild rank (color codes)"
           }
         ],
         "private": [

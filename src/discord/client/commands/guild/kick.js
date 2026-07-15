@@ -73,6 +73,7 @@ const { EmbedBuilder } = require('discord.js');
 
 // Specific Imports
 const CommandResponseListener = require('../../handlers/CommandResponseListener.js');
+const kickReasonStore = require('../../../../shared/KickReasonStore.js');
 const logger = require('../../../../shared/logger');
 
 /**
@@ -230,6 +231,12 @@ async function handleKickCommand(interaction, context) {
 
         // Prepare Minecraft command with reason
         const command = `/g kick ${username} ${reason}`;
+
+        // Record the reason so the detection notification (fired a few ms later when
+        // Hypixel rebroadcasts the kick) can forward it to FrenchLegacy-Discord, which
+        // DMs the kicked player. Stored before sending because the parsed kick event
+        // can arrive before this command's response resolves.
+        kickReasonStore.set(guildConfig.id, username, reason);
 
         // Set up command response listener
         const responseListener = getCommandResponseListener();

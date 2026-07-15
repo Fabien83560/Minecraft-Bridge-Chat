@@ -42,6 +42,7 @@ const BridgeLocator = require("../../bridgeLocator.js");
 const logger = require("../../shared/logger");
 
 const CommandResponseListener = require("../client/handlers/CommandResponseListener.js");
+const kickReasonStore = require("../../shared/KickReasonStore.js");
 
 /**
  * BridgeCoordinator - Coordinate bidirectional message bridging
@@ -636,9 +637,17 @@ class BridgeCoordinator {
                     notificationMessage = `[GUILD LEAVE] ${eventData.username} left ${guildConfig.name}`;
                     break;
 
-                case 'kick':
+                case 'kick': {
+                    // Attach the reason from the Discord /guild kick command if this kick
+                    // originated there (in-game kicks have no reason). FrenchLegacy-Discord
+                    // parses this to DM the kicked player.
+                    const kickReason = kickReasonStore.take(guildConfig.id, eventData.username);
                     notificationMessage = `[GUILD KICK] ${eventData.username} kicked from ${guildConfig.name}`;
+                    if (kickReason) {
+                        notificationMessage += ` | Reason: ${kickReason}`;
+                    }
                     break;
+                }
 
                 case 'promote':
                     notificationMessage = `[GUILD PROMOTE] ${eventData.username} was promoted to ${eventData.toRank || 'Unknown Rank'} in ${guildConfig.name}`;

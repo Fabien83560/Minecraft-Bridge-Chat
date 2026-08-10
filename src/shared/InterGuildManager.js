@@ -447,29 +447,19 @@ class InterGuildManager {
             return true;
         }
 
-        // Pattern 1 - Check for obvious relay patterns
-        const relayPatterns = [
-            /^(\w+):\s*(.+)$/,                    // "User: message"
-            /^(\w+):\s*\1:\s*(.+)$/,             // "User: User: message"
-            /^(\w+):\s*(\w+):\s*(.+)$/,          // "User1: User2: message"
-            /^\[[\w\d]+\]\s+(\w+):\s*(.+)$/,     // "[TAG] User: message"
-            /^\[[\w\d]+\]\s+(\w+)\s+\[.*?\]:\s*(.+)$/,  // "[TAG] User [Rank]: message"
-        ];
-
-        // Officer-specific relay patterns
-        if (chatType === 'officer') {
-            relayPatterns.push(
-                /^\[[\w\d]+\]\s+\[OFFICER\]\s+(\w+):\s*(.+)$/,     // "[TAG] [OFFICER] User: message"
-                /^\[.*?\]\s+(\w+)\s+\[(?:Officer|Admin|Owner)\]:\s*(.+)$/i,  // "[TAG] User [Officer]: message"
-            );
-        }
-
-        for (let i = 0; i < relayPatterns.length; i++) {
-            const pattern = relayPatterns[i];
-            if (pattern.test(message)) {
-                logger.debug(`[${sourceGuildConfig.name}] ✅ FILTERED ${chatType} relay pattern ${i}: "${message.substring(0, 50)}..."`);
-                return true;
-            }
+        // A block of content-shape relay patterns used to run here, matching things like
+        // /^(\w+):\s*(.+)$/ against the message body. Because the own-bot check above
+        // returns early, that block could only ever be reached by a real player's
+        // message - so it produced false positives exclusively. Any player writing
+        // "edit: je voulais dire X" or "info: ..." had their message silently dropped
+        // from the inter-guild relay.
+        //
+        // The genuine signal for a relay is the sender being one of the bridge's own bot
+        // accounts, which is what isBridgeBotRelay checks.
+        if (this.isBridgeBotRelay(username, message, sourceGuildConfig)) {
+            logger.debug(`[${sourceGuildConfig.name}] ✅ FILTERED ${chatType} relay from bridge bot ${username}`);
+            metrics.filtered('inter_guild', 'bridge_bot_relay');
+            return true;
         }
 
         // Pattern 2 - Check message history for this guild
@@ -520,8 +510,69 @@ class InterGuildManager {
     }
 
     /**
+     * Check whether a message is another bridge bot relaying content
+     *
+     * The real loop risk is one of the bridge's own bot accounts echoing content that
+     * originated elsewhere. Every configured guild runs its own bot, so a message whose
+     * sender matches any of those accounts is a relay by definition - the guild's human
+     * members never use those names.
+     *
+     * As a second signal, a message body prefixed with a configured guild tag (the
+     * "[V1] " form this bridge emits) is treated as relayed content regardless of
+     * sender, since only the bridge produces that prefix.
+     *
+     * @param {string} username - Sender of the message
+     * @param {string} message - Message body
+     * @param {object} sourceGuildConfig - Source guild configuration
+     * @param {string} sourceGuildConfig.name - Guild name for logging
+     * @returns {boolean} Whether the message is bridge-relayed content
+     *
+     * @example
+     * manager.isBridgeBotRelay('FrenchLegacyV2', '[V1] Player: salut', guildConfig);
+     * // Returns: true
+     *
+     * @example
+     * manager.isBridgeBotRelay('Player', 'edit: je voulais dire X', guildConfig);
+     * // Returns: false - a real player, previously dropped as a false positive
+     */
+    isBridgeBotRelay(username, message, sourceGuildConfig) {
+        try {
+            const allGuilds = this.config.getEnabledGuilds() || [];
+
+            // Sender is one of our own bridge bot accounts
+            const isBridgeBot = allGuilds.some(guild =>
+                guild.account?.username &&
+                guild.account.username.toLowerCase() === username.toLowerCase()
+            );
+
+            if (isBridgeBot) {
+                return true;
+            }
+
+            // Body carries a source tag this bridge emits, e.g. "[V1] Player: text"
+            const tags = allGuilds
+                .map(guild => guild.tag)
+                .filter(Boolean)
+                .map(tag => tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+
+            if (tags.length > 0) {
+                const tagPattern = new RegExp(`^\\[(?:${tags.join('|')})\\]\\s`, 'i');
+                if (tagPattern.test(message)) {
+                    return true;
+                }
+            }
+
+            return false;
+
+        } catch (error) {
+            logger.logError(error, `Error checking bridge bot relay for ${sourceGuildConfig.name}`);
+            return false;
+        }
+    }
+
+    /**
      * Track message for loop detection
-     * 
+     *
      * Adds message to guild's message history for duplicate detection. Maintains
      * a sliding window of the last 10 messages per guild-chatType combination.
      * 

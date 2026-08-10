@@ -45,6 +45,7 @@ const BridgeLocator = require("../../../bridgeLocator.js");
 const ChatParser = require("./ChatParser.js");
 const EventParser = require("./EventParser.js");
 const logger = require("../../../shared/logger");
+const metrics = require("../../../shared/BridgeMetrics.js");
 
 /**
  * MessageCoordinator - Coordinates message parsing and filtering
@@ -309,81 +310,85 @@ class MessageCoordinator {
 
         const message = chatData.message;
         const username = chatData.username;
-        const botUsername = guildConfig.account.username;
         const chatType = chatData.chatType || 'guild';
 
-        // Pattern 1 - Message from bot that looks like "SomeUser: actual message"
-        const relayPattern1 = /^(\w+):\s*(.+)$/;
-        const relayMatch1 = message.match(relayPattern1);
-        
-        if (relayMatch1 && username.toLowerCase() === botUsername.toLowerCase()) {
-            const relayedUsername = relayMatch1[1];
-            const relayedMessage = relayMatch1[2];
-            
-            logger.debug(`[${guildConfig.name}] ✅ FILTERED ${chatType} relay pattern 1: Bot ${username} relaying message from ${relayedUsername}: "${relayedMessage.substring(0, 30)}..."`);
+        // This method is only ever reached after isOwnBotMessage() has already returned
+        // false, so by construction the sender is never our own bot. The previous
+        // implementation nevertheless tested six content-shape patterns against the
+        // message body - "[TAG] User: msg", "User: User: msg", and for officer chat
+        // anything matching /.*?(?:officer|admin).*?:/ - none of which could ever fire
+        // on a bot message. They only ever fired on real players, silently dropping
+        // legitimate chat such as "admin: c'est bon" or "[test] moi: salut".
+        //
+        // The reliable signal is the sender being one of the bridge's own bot accounts
+        // (a different guild's bot relaying into this one), or the body carrying a
+        // source tag that only this bridge emits.
+        const relayInfo = this.detectBridgeRelay(username, message, guildConfig);
+
+        if (relayInfo) {
+            logger.debug(`[${guildConfig.name}] ✅ FILTERED ${chatType} relay (${relayInfo}): "${message.substring(0, 50)}..."`);
+            metrics.filtered('mc_to_discord', `relay_${relayInfo}`);
             return true;
-        }
-
-        // Pattern 2 - Repeated username chains "User1: User2: User3: message"
-        const chainPattern = /^(\w+):\s*\1:\s*(.+)$/;
-        const chainMatch = message.match(chainPattern);
-        
-        if (chainMatch) {
-            logger.debug(`[${guildConfig.name}] ✅ FILTERED ${chatType} username chain pattern: "${message.substring(0, 50)}..."`);
-            return true;
-        }
-
-        // Pattern 3 - Multiple colon-separated usernames (sign of relay)
-        const multiUserPattern = /^(\w+):\s*(\w+):\s*(\w+):\s*(.+)$/;
-        const multiUserMatch = message.match(multiUserPattern);
-        
-        if (multiUserMatch) {
-            logger.debug(`[${guildConfig.name}] ✅ FILTERED ${chatType} multi-user relay pattern: "${message.substring(0, 50)}..."`);
-            return true;
-        }
-
-        // Pattern 4 - Guild tag patterns that indicate inter-guild relay
-        const guildTagPatterns = [
-            /^\[[\w\d]+\]\s+(\w+):\s*(.+)$/,     // [TAG] User: message
-            /^\[[\w\d]+\]\s+(\w+)\s+\[.*?\]:\s*(.+)$/,  // [TAG] User [Rank]: message
-            /^\[[\w\d]+\]\s+\[OFFICER\]\s+(\w+):\s*(.+)$/,  // [TAG] [OFFICER] User: message
-        ];
-
-        for (let i = 0; i < guildTagPatterns.length; i++) {
-            const pattern = guildTagPatterns[i];
-            const match = message.match(pattern);
-            
-            if (match) {
-                logger.debug(`[${guildConfig.name}] ✅ FILTERED ${chatType} guild tag pattern ${i}: "${message.substring(0, 50)}..."`);
-                return true;
-            }
-        }
-
-        // Pattern 5 - Check if bot is relaying based on message structure and timing
-        // Messages that contain the bot's own username in the content (potential echo)
-        const botEchoPattern = new RegExp(`\\b${botUsername}\\b`, 'i');
-        if (username.toLowerCase() === botUsername.toLowerCase() && botEchoPattern.test(message)) {
-            logger.debug(`[${guildConfig.name}] ✅ FILTERED ${chatType} bot echo: Bot ${username} mentioning itself in message`);
-            return true;
-        }
-
-        // Pattern 6 - Officer-specific relay patterns
-        if (chatType === 'officer') {
-            const officerRelayPatterns = [
-                /^\[.*?\]\s+.*?\[(?:Officer|Admin|Owner)\].*?:\s*(.+)$/i,  // Inter-guild officer with rank
-                /^(?:\[.*?\]\s+)?.*?(?:officer|admin).*?:\s*(.+)$/i,       // Messages containing officer keywords
-            ];
-
-            for (let i = 0; i < officerRelayPatterns.length; i++) {
-                const pattern = officerRelayPatterns[i];
-                if (pattern.test(message)) {
-                    logger.debug(`[${guildConfig.name}] ✅ FILTERED officer relay pattern ${i}: "${message.substring(0, 50)}..."`);
-                    return true;
-                }
-            }
         }
 
         return false;
+    }
+
+    /**
+     * Detect content relayed by one of the bridge's own bot accounts
+     *
+     * Returns a short reason slug when the message is bridge-produced, or null when it
+     * is genuine player chat. Two signals are used:
+     *
+     * 1. The sender matches a configured bot account for any enabled guild. Real members
+     *    never carry those names, so this is unambiguous.
+     * 2. The body starts with a configured guild tag in the "[V1] " form this bridge
+     *    emits when showSourceTag is on. Only the bridge produces that prefix.
+     *
+     * @param {string} username - Message sender
+     * @param {string} message - Message body
+     * @param {object} guildConfig - Guild configuration (used for logging context)
+     * @returns {string|null} Reason slug ('bridge_bot' or 'source_tag'), or null
+     *
+     * @example
+     * coordinator.detectBridgeRelay('FrenchLegacyV2', 'Player: salut', guildConfig);
+     * // Returns: 'bridge_bot'
+     *
+     * @example
+     * coordinator.detectBridgeRelay('Pierre8063', 'admin: c\'est bon', guildConfig);
+     * // Returns: null - genuine chat that used to be dropped
+     */
+    detectBridgeRelay(username, message, guildConfig) {
+        try {
+            const allGuilds = this.config.getEnabledGuilds() || [];
+
+            const isBridgeBot = allGuilds.some(guild =>
+                guild.account?.username &&
+                guild.account.username.toLowerCase() === username.toLowerCase()
+            );
+
+            if (isBridgeBot) {
+                return 'bridge_bot';
+            }
+
+            const tags = allGuilds
+                .map(guild => guild.tag)
+                .filter(Boolean)
+                .map(tag => tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+
+            if (tags.length > 0) {
+                const tagPattern = new RegExp(`^\\[(?:${tags.join('|')})\\]\\s`, 'i');
+                if (tagPattern.test(message)) {
+                    return 'source_tag';
+                }
+            }
+
+            return null;
+
+        } catch (error) {
+            logger.logError(error, `Error detecting bridge relay for ${guildConfig.name}`);
+            return null;
+        }
     }
 
     /**

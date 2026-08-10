@@ -145,19 +145,25 @@ class BridgeCoordinator {
         logger.debug('[BRIDGE] Setting up Minecraft to Discord event handlers...');
 
         // Handle Minecraft messages
+        // The returned promise is deliberately caught here: these handlers are invoked
+        // from EventEmitter callbacks that cannot await them, and main.js treats an
+        // unhandled rejection as fatal.
         this.minecraftManager.onMessage((messageData) => {
-            this.handleMinecraftMessage(messageData);
+            this.handleMinecraftMessage(messageData)
+                .catch(error => logger.logError(error, 'Unhandled error in handleMinecraftMessage'));
         });
 
         // Handle Minecraft events
         this.minecraftManager.onEvent((eventData) => {
-            this.handleMinecraftEvent(eventData);
+            this.handleMinecraftEvent(eventData)
+                .catch(error => logger.logError(error, 'Unhandled error in handleMinecraftEvent'));
         });
 
         // Handle Minecraft connection events
         this.minecraftManager.onConnection((connectionData) => {
             logger.debug(`[BRIDGE] Received Minecraft connection event: ${JSON.stringify(connectionData)}`);
-            this.handleMinecraftConnection(connectionData);
+            this.handleMinecraftConnection(connectionData)
+                .catch(error => logger.logError(error, 'Unhandled error in handleMinecraftConnection'));
         });
 
         // Send 'connected' status for bots that connected before the bridge was ready
@@ -202,7 +208,8 @@ class BridgeCoordinator {
 
         // Handle Discord messages
         this.discordManager.onMessage((messageData) => {
-            this.handleDiscordMessage(messageData);
+            this.handleDiscordMessage(messageData)
+                .catch(error => logger.logError(error, 'Unhandled error in handleDiscordMessage'));
         });
 
         logger.bridge('✅ Discord to Minecraft bridge setup completed');
@@ -838,6 +845,71 @@ class BridgeCoordinator {
 
         } catch (error) {
             logger.logError(error, `Failed to send event log to Discord for ${eventData.type} event`);
+        }
+    }
+
+    /**
+     * Handle a failed or partial Discord to Minecraft delivery
+     *
+     * Reports a bridging failure back to the Discord user who sent the message and
+     * records it in the metrics. Distinguishes a total failure (nothing was delivered)
+     * from a partial one (some guilds received the message, others did not) so the
+     * reaction reflects what actually happened.
+     *
+     * This method previously did not exist while being called from four places in this
+     * class. Every call threw a TypeError, and because one of those calls sits inside
+     * the catch block of handleDiscordMessage, the TypeError escaped the async function
+     * as an unhandled rejection - which main.js turns into process.exit(1). Any partial
+     * delivery failure therefore killed the whole bridge.
+     *
+     * @async
+     * @param {object} messageData - Discord message data being bridged
+     * @param {object} [messageData.messageRef] - Discord.js message object for reactions
+     * @param {object} messageData.author - Message author information
+     * @param {Error} error - The error that caused the failure
+     * @param {number} successCount - Number of guilds that received the message
+     * @param {number} totalGuilds - Number of guilds that should have received it
+     *
+     * @example
+     * await coordinator.handleBridgeError(messageData, error, 2, 3);
+     * // Adds a ⚠️ reaction: 2 of 3 guilds got the message
+     */
+    async handleBridgeError(messageData, error, successCount, totalGuilds) {
+        try {
+            const isPartial = successCount > 0 && successCount < totalGuilds;
+            const reason = isPartial ? 'partial_delivery' : 'delivery_failed';
+
+            metrics.dropped(
+                'discord_to_mc',
+                reason,
+                `${successCount}/${totalGuilds} guilds - ${error?.message || 'unknown error'}`
+            );
+
+            if (isPartial) {
+                logger.warn(
+                    `[DC→MC] Partial delivery: ${successCount}/${totalGuilds} guilds received the message ` +
+                    `from ${messageData?.author?.username || 'unknown'} - ${error?.message || 'unknown error'}`
+                );
+            } else {
+                logger.warn(
+                    `[DC→MC] Delivery failed for message from ${messageData?.author?.username || 'unknown'} ` +
+                    `- ${error?.message || 'unknown error'}`
+                );
+            }
+
+            // Give the sender visible feedback: ⚠️ when it partly went through,
+            // ❌ when nothing did
+            const reaction = isPartial ? '⚠️' : '❌';
+            const target = messageData?.messageRef || messageData?.message;
+
+            if (target && typeof target.react === 'function') {
+                await target.react(reaction);
+            }
+
+        } catch (reactionError) {
+            // Never let error reporting become a new source of failure - this method is
+            // called from inside catch blocks
+            logger.debug(`Failed to report bridge error to Discord: ${reactionError.message}`);
         }
     }
 

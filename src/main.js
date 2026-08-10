@@ -698,12 +698,20 @@ process.on('uncaughtException', (error) => {
 
 /**
  * Handle unhandled promise rejections
- * Logs error and exits process to prevent undefined state
+ *
+ * Logs the rejection and keeps the process running. Exiting here used to make any
+ * stray rejection - a failed Discord API call, a bot disconnecting mid-send - tear
+ * down the whole bridge and drop every message in flight during the restart. A single
+ * rejected promise does not leave the bridge in an undefined state, so the reliable
+ * behaviour is to report it loudly and carry on. Genuinely unrecoverable faults still
+ * exit through the uncaughtException handler above.
  */
 process.on('unhandledRejection', (reason, promise) => {
-    const error = new Error(`Unhandled promise rejection: ${reason}`);
-    logger.logError(error, 'Unhandled promise rejection - process will exit');
-    process.exit(1);
+    const error = reason instanceof Error
+        ? reason
+        : new Error(`Unhandled promise rejection: ${reason}`);
+
+    logger.logError(error, 'Unhandled promise rejection - bridge continues running');
 });
 
 // Start the application if run directly

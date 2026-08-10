@@ -285,12 +285,9 @@ class InterGuildManager {
                 return;
             }
 
-            // Check rate limiting
-            if (this.isRateLimited(sourceGuildConfig.id)) {
-                logger.debug(`[${sourceGuildConfig.name}] Message rate limited`);
-                return;
-            }
-
+            // No rate-limit drop here any more. Pacing is owned by each bot's ChatQueue,
+            // which delays writes instead of discarding them; dropping at this layer
+            // silently lost guild chat during busy periods.
             const messageType = messageData.chatType === 'officer' ? 'guild message (from officer chat)' : 'guild message';
             logger.bridge(`[INTER-GUILD] Processing ${messageType} from ${sourceGuildConfig.name} to ${targetGuilds.length} target guilds`);
 
@@ -366,12 +363,7 @@ class InterGuildManager {
                 return;
             }
 
-            // Check rate limiting
-            if (this.isRateLimited(sourceGuildConfig.id)) {
-                logger.debug(`[${sourceGuildConfig.name}] Officer message rate limited`);
-                return;
-            }
-
+            // Pacing is owned by each bot's ChatQueue - see processGuildMessage
             logger.bridge(`[INTER-GUILD] Processing officer message from ${sourceGuildConfig.name} to ${targetGuilds.length} target guilds`);
 
             this.trackMessage(messageData, sourceGuildConfig);
@@ -1039,13 +1031,24 @@ class InterGuildManager {
     async processQueue() {
         while (this.isProcessingQueue) {
             try {
-                if (this.messageQueue.length > 0) {
-                    const messageItem = this.messageQueue.shift();
-                    await this.deliverQueuedMessage(messageItem);
+                if (this.messageQueue.length === 0) {
+                    await this.wait(200); // Idle poll
+                    continue;
                 }
 
-                // Wait before processing next message
-                await this.wait(1000); // 1 second between messages
+                const messageItem = this.messageQueue.shift();
+
+                // Dispatch without awaiting delivery. Each target guild has its own
+                // ChatQueue that paces that bot independently, so awaiting here would
+                // force all guilds to share a single global send rate - which is what
+                // the old fixed 1s sleep did, throttling three bots down to one bot's
+                // worth of throughput.
+                this.deliverQueuedMessage(messageItem).catch(error => {
+                    logger.logError(error, `[INTER-GUILD] Delivery failed for ${messageItem.targetGuild}`);
+                });
+
+                // Small yield so a large burst does not block the event loop
+                await this.wait(20);
 
             } catch (error) {
                 logger.logError(error, 'Error in queue processor');
@@ -1103,18 +1106,25 @@ class InterGuildManager {
                         this.messageQueue.push(messageItem);
                     }, 5000); // Try again in 5 seconds
                     return;
-                } else {
-                    logger.warn(`[${messageItem.targetGuild}] Max attempts reached, dropping message`);
-                    return;
                 }
+
+                metrics.dropped(
+                    'inter_guild',
+                    'target_never_connected',
+                    `${messageItem.targetGuild}: ${messageItem.message.substring(0, 60)}`
+                );
+                return;
             }
 
-            // Send the message based on type
+            // Send the message based on type. These awaits now resolve when the bot has
+            // actually written to the server, not when the write was merely requested.
+            const options = { direction: 'inter_guild' };
+
             if (messageItem.type === 'officer_message') {
-                await messageItem.minecraftManager.sendOfficerMessage(messageItem.guildId, messageItem.message);
+                await messageItem.minecraftManager.sendOfficerMessage(messageItem.guildId, messageItem.message, options);
                 logger.bridge(`[INTER-GUILD] Delivered officer message to ${messageItem.targetGuild}: "${messageItem.message}"`);
             } else {
-                await messageItem.minecraftManager.sendMessage(messageItem.guildId, messageItem.message);
+                await messageItem.minecraftManager.sendMessage(messageItem.guildId, messageItem.message, options);
                 logger.bridge(`[INTER-GUILD] Delivered ${messageItem.type} to ${messageItem.targetGuild}: "${messageItem.message}"`);
             }
 
@@ -1125,7 +1135,11 @@ class InterGuildManager {
                     this.messageQueue.push(messageItem);
                 }, 2000 * messageItem.attempts); // Exponential backoff
             } else {
-                logger.logError(error, `[${messageItem.targetGuild}] Max attempts reached, dropping message`);
+                metrics.dropped(
+                    'inter_guild',
+                    'max_attempts',
+                    `${messageItem.targetGuild}: ${error.message}`
+                );
             }
         }
     }

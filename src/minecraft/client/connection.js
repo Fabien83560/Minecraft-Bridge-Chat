@@ -37,6 +37,8 @@ const mineflayer = require('mineflayer');
 // Specific Imports
 const logger = require("../../shared/logger");
 const StrategyManager = require("../servers/StrategyManager.js")
+const ChatQueue = require("./ChatQueue.js");
+const BridgeLocator = require("../../bridgeLocator.js");
 
 /**
  * MinecraftConnection - Manages individual bot connections
@@ -90,6 +92,59 @@ class MinecraftConnection {
         // Event callbacks
         this.messageCallback = null;
         this.eventCallback = null;
+
+        // Serialized outbound chat. Every write to this account goes through here so
+        // that Discord bridging, inter-guild relaying and slash commands can never
+        // collide inside the same tick and get silently discarded by the server.
+        this._chatQueue = new ChatQueue(
+            guildConfig,
+            {
+                isConnected: () => this._isConnected && !!this._bot,
+                rawSend: (text) => this._bot.chat(text)
+            },
+            this.getQueueOptions()
+        );
+    }
+
+    /**
+     * Build ChatQueue options from configuration
+     *
+     * Reads bridge.minecraftQueue when present. When it is absent the minimum interval
+     * is derived from the legacy bridge.rateLimit.minecraft window/limit pair so an
+     * un-migrated configuration still gets sane pacing rather than no pacing at all.
+     *
+     * @returns {object} Options object for the ChatQueue constructor
+     *
+     * @example
+     * const options = connection.getQueueOptions();
+     * // { minIntervalMs: 1200, jitterMs: 250, maxSize: 200, ... }
+     */
+    getQueueOptions() {
+        let config = null;
+
+        try {
+            config = BridgeLocator.getInstance().config;
+        } catch (error) {
+            logger.debug('Config unavailable for ChatQueue options, using defaults');
+        }
+
+        const queueConfig = config?.get('bridge.minecraftQueue') || {};
+        const legacyRateLimit = config?.get('bridge.rateLimit.minecraft') || {};
+
+        // Derive a per-message interval from the old limit/window pair when the
+        // dedicated queue settings are not configured
+        const derivedInterval = legacyRateLimit.limit > 0 && legacyRateLimit.window > 0
+            ? Math.ceil(legacyRateLimit.window / legacyRateLimit.limit)
+            : 1200;
+
+        return {
+            minIntervalMs: queueConfig.minIntervalMs ?? Math.max(derivedInterval, 1200),
+            jitterMs: queueConfig.jitterMs ?? 250,
+            maxSize: queueConfig.maxSize ?? 200,
+            antiDuplicate: queueConfig.antiDuplicate !== false,
+            duplicateSuffix: queueConfig.duplicateSuffix ?? 'ᐧ',
+            duplicateWindowMs: queueConfig.duplicateWindowMs ?? 60000
+        };
     }
 
     /**
@@ -143,6 +198,10 @@ class MinecraftConnection {
             this._isConnected = true;
             this._isConnecting = false;
             this._lastConnectionTime = Date.now();
+
+            // A fresh session starts with a fresh server-side rate limit, so clear the
+            // pacing timestamp and duplicate history from the previous connection
+            this._chatQueue.resetPacing();
             
             // Log successful connection with performance info
             const connectionTime = Date.now() - this._connectionStartTime;
@@ -599,100 +658,103 @@ class MinecraftConnection {
 
     /**
      * Send message to guild chat
-     * 
-     * Sends message using /gc command with automatic truncation
-     * to respect chat length limits.
-     * 
+     *
+     * Queues a /gc write. The returned promise settles when the message is actually
+     * written to the server, not when it is queued, so a caller that awaits it and logs
+     * success is reporting a real send rather than an intent to send.
+     *
      * @param {string} message - Message to send
-     * @returns {Promise<void>}
-     * @throws {Error} If bot is not connected or send fails
-     * 
+     * @param {object} [options={}] - Delivery options
+     * @param {string} [options.direction='inter_guild'] - Metrics direction for accounting
+     * @returns {Promise<void>} Settles once written, rejects if the message is dropped
+     * @throws {Error} If bot is not connected or the queue drops the message
+     *
      * @example
      * await connection.sendMessage('Hello guild!');
      */
-    async sendMessage(message) {
+    async sendMessage(message, options = {}) {
         if (!this._isConnected || !this._bot) {
             throw new Error(`Cannot send message: ${this._guildConfig.name} is not connected`);
         }
 
-        try {
-            // Respect chat length limit
-            const maxLength = this._guildConfig.account.chatLengthLimit || 256;
-            const truncatedMessage = message.length > maxLength 
-                ? message.substring(0, maxLength - 3) + '...'
-                : message;
-
-            const fullCommand = `/gc ${truncatedMessage}`;
-            this._bot.chat(fullCommand);
-
-            logger.debug(`Guild message sent for ${this._guildConfig.name}: ${truncatedMessage}`);
-        
-        } catch (error) {
-            logger.logError(error, `Failed to send guild message for ${this._guildConfig.name}`);
-            throw error;
-        }
+        // Length clamping happens inside the queue, which also accounts for any
+        // anti-duplicate suffix it may need to append.
+        return this._chatQueue.enqueue(`/gc ${message}`, {
+            priority: 'chat',
+            direction: options.direction || 'inter_guild',
+            label: 'guild chat'
+        });
     }
 
     /**
      * Send message to officer chat
-     * 
-     * Sends message using /oc command with automatic truncation
-     * to respect chat length limits.
-     * 
+     *
+     * Queues an /oc write through the same serialized queue as guild chat, so officer
+     * and guild traffic share one pacing budget for this account.
+     *
      * @param {string} message - Message to send
-     * @returns {Promise<void>}
-     * @throws {Error} If bot is not connected or send fails
-     * 
+     * @param {object} [options={}] - Delivery options
+     * @param {string} [options.direction='inter_guild'] - Metrics direction for accounting
+     * @returns {Promise<void>} Settles once written, rejects if the message is dropped
+     * @throws {Error} If bot is not connected or the queue drops the message
+     *
      * @example
      * await connection.sendOfficerMessage('Officer announcement');
      */
-    async sendOfficerMessage(message) {
+    async sendOfficerMessage(message, options = {}) {
         if (!this._isConnected || !this._bot) {
             throw new Error(`Cannot send officer message: ${this._guildConfig.name} is not connected`);
         }
 
-        try {
-            // Respect chat length limit
-            const maxLength = this._guildConfig.account.chatLengthLimit || 256;
-            const truncatedMessage = message.length > maxLength 
-                ? message.substring(0, maxLength - 3) + '...'
-                : message;
-
-            const fullCommand = `/oc ${truncatedMessage}`;
-            this._bot.chat(fullCommand);
-
-            logger.debug(`Officer message sent for ${this._guildConfig.name}: ${truncatedMessage}`);
-        
-        } catch (error) {
-            logger.logError(error, `Failed to send officer message for ${this._guildConfig.name}`);
-            throw error;
-        }
+        return this._chatQueue.enqueue(`/oc ${message}`, {
+            priority: 'chat',
+            direction: options.direction || 'inter_guild',
+            label: 'officer chat'
+        });
     }
 
     /**
      * Execute arbitrary command on the server
-     * 
-     * Sends any command to the server without modification.
-     * Use with caution - no validation or truncation is applied.
-     * 
+     *
+     * Queues the command on the high-priority lane so it drains ahead of relayed chat.
+     * Slash commands have a Discord user waiting on a CommandResponseListener with a
+     * timeout, so they must not sit behind a backlog of bridged messages.
+     *
      * @param {string} command - Command to execute (including /)
-     * @returns {Promise<void>}
-     * @throws {Error} If bot is not connected or command fails
-     * 
+     * @param {object} [options={}] - Delivery options
+     * @param {string} [options.direction='discord_to_mc'] - Metrics direction for accounting
+     * @param {string} [options.priority='command'] - Lane to use ('command' or 'chat')
+     * @returns {Promise<void>} Settles once written, rejects if the command is dropped
+     * @throws {Error} If bot is not connected or the queue drops the command
+     *
      * @example
      * await connection.executeCommand('/g online');
      */
-    async executeCommand(command) {
+    async executeCommand(command, options = {}) {
         if (!this._isConnected || !this._bot) {
             throw new Error(`Cannot execute command: ${this._guildConfig.name} is not connected`);
         }
 
-        try {
-            this._bot.chat(command);        
-        } catch (error) {
-            logger.logError(error, `Failed to execute command for ${this._guildConfig.name}`);
-            throw error;
-        }
+        return this._chatQueue.enqueue(command, {
+            priority: options.priority || 'command',
+            direction: options.direction || 'discord_to_mc',
+            label: 'command'
+        });
+    }
+
+    /**
+     * Get outbound queue statistics
+     *
+     * Exposes queue depth and pacing state for monitoring and status commands.
+     *
+     * @returns {object} Queue statistics from ChatQueue.getStats()
+     *
+     * @example
+     * const stats = connection.getQueueStats();
+     * console.log(`${stats.chatDepth} messages waiting`);
+     */
+    getQueueStats() {
+        return this._chatQueue.getStats();
     }
 
     /**
@@ -713,6 +775,10 @@ class MinecraftConnection {
      * // Silent disconnect for reconnection
      */
     async disconnect(logAsNormal = true) {
+        // Reject anything still queued before tearing down the bot, so pending
+        // messages are accounted as dropped instead of vanishing with the connection
+        this._chatQueue.stop(logAsNormal ? 'disconnect' : 'reconnect');
+
         if (this._bot) {
             try {
                 this._bot.removeAllListeners();

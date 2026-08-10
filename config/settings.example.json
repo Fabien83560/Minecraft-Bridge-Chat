@@ -136,7 +136,25 @@
             "events": {
                 "limit": 10,
                 "window": 60000
-            }
+            },
+            "discordMaxPending": 500
+        },
+        "minecraftQueue": {
+            "_comment": "Serialized outbound chat per bot. Every write to a bot account (Discord bridging, inter-guild relay, slash commands) goes through one queue so two writers can never collide inside the same tick and get silently discarded by Hypixel.",
+            "minIntervalMs": 1200,
+            "jitterMs": 250,
+            "maxSize": 200,
+            "antiDuplicate": true,
+            "duplicateSuffix": "ᐧ",
+            "duplicateWindowMs": 60000
+        },
+        "events": {
+            "_comment": "Event types that produce no Discord output at all - not in the chat channel, not in the event log channels, not in the detection channel. Defaults cover the high-volume connect/disconnect notifications ('join'/'disconnect') and the /g online listing ('online'). Remove an entry to start surfacing it. Inter-guild relaying is controlled separately by bridge.interGuild.shareableEvents.",
+            "excludeFromDiscord": [
+                "online",
+                "join",
+                "disconnect"
+            ]
         }
     },
     "discord": {

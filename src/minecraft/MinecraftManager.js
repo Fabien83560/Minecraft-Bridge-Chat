@@ -588,12 +588,53 @@ class MinecraftManager {
      * const msg = `[Announcement] Server restart in 5 minutes`;
      * await manager.sendMessage(guildId, msg);
      */
-    async sendMessage(guildId, message) {
+    async sendMessage(guildId, message, options = {}) {
         if (!this._isStarted || !this._botManager) {
             throw new Error('MinecraftManager not started');
         }
 
-        return this._botManager.sendMessage(guildId, message);
+        return this._botManager.sendMessage(guildId, message, options);
+    }
+
+    /**
+     * Send message to a guild's officer chat
+     *
+     * Queues an /oc write for the specified guild through that bot's serialized
+     * outbound queue.
+     *
+     * @async
+     * @param {string} guildId - Guild ID to send to
+     * @param {string} message - Message to send
+     * @param {object} [options={}] - Delivery options forwarded to the connection queue
+     * @param {string} [options.direction='inter_guild'] - Metrics direction for accounting
+     * @returns {Promise<void>} Settles once the message is written to the server
+     * @throws {Error} If manager not started, guild not found, or not connected
+     *
+     * @example
+     * await manager.sendOfficerMessage('guild123', 'Officer only announcement');
+     */
+    async sendOfficerMessage(guildId, message, options = {}) {
+        if (!this._isStarted || !this._botManager) {
+            throw new Error('MinecraftManager not started');
+        }
+
+        return this._botManager.sendOfficerMessage(guildId, message, options);
+    }
+
+    /**
+     * Get outbound queue statistics for every guild
+     *
+     * @returns {object} Queue statistics keyed by guild ID, empty if not started
+     *
+     * @example
+     * const stats = manager.getQueueStats();
+     */
+    getQueueStats() {
+        if (!this._botManager) {
+            return {};
+        }
+
+        return this._botManager.getQueueStats();
     }
 
     /**
@@ -620,12 +661,12 @@ class MinecraftManager {
      * // Kick player
      * await manager.executeCommand(guildId, '/g kick PlayerName');
      */
-    async executeCommand(guildId, command) {
+    async executeCommand(guildId, command, options = {}) {
         if (!this._isStarted || !this._botManager) {
             throw new Error('MinecraftManager not started');
         }
 
-        return this._botManager.executeCommand(guildId, command);
+        return this._botManager.executeCommand(guildId, command, options);
     }
 
     // ==================== Status Methods ====================

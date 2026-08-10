@@ -756,12 +756,19 @@ class BridgeCoordinator {
      */
     async sendMessageToMinecraft(guildId, message, chatType) {
         try {
-            // For officer chat, use /oc command, for guild chat use /gc command
-            const command = chatType === 'officer' ? `/oc ${message}` : `/gc ${message}`;
-            
-            // Use executeCommand instead of sendMessage for proper guild chat commands
-            await this.minecraftManager.executeCommand(guildId, command);
-            
+            // Route through sendMessage/sendOfficerMessage rather than executeCommand:
+            // both build the same /gc or /oc write, but they use the queue's chat lane.
+            // executeCommand uses the high-priority command lane, which exists so slash
+            // commands are not stuck behind bridged chat - putting chat there would
+            // defeat that and let Discord traffic jump ahead of the inter-guild relay.
+            const options = { direction: 'discord_to_mc' };
+
+            if (chatType === 'officer') {
+                await this.minecraftManager.sendOfficerMessage(guildId, message, options);
+            } else {
+                await this.minecraftManager.sendMessage(guildId, message, options);
+            }
+
         } catch (error) {
             logger.logError(error, `Failed to send ${chatType} message to guild ${guildId}`);
             throw error;

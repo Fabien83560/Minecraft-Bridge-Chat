@@ -52,6 +52,7 @@
 const logger = require('./logger');
 const MessageFormatter = require('./MessageFormatter.js');
 const BridgeLocator = require('../bridgeLocator.js');
+const metrics = require('./BridgeMetrics.js');
 
 /**
  * InterGuildManager - Manage cross-guild message and event broadcasting
@@ -450,6 +451,7 @@ class InterGuildManager {
         // CRITICAL: Always filter our own bot messages first
         if (username.toLowerCase() === botUsername.toLowerCase()) {
             logger.debug(`[${sourceGuildConfig.name}] ✅ FILTERED own bot ${chatType} message: ${username} -> "${message.substring(0, 50)}..."`);
+            metrics.filtered('inter_guild', 'own_bot_message');
             return true;
         }
 
@@ -492,6 +494,7 @@ class InterGuildManager {
 
         if (recentDuplicate) {
             logger.debug(`[${sourceGuildConfig.name}] ✅ FILTERED ${chatType} recent duplicate: ${username} -> "${message.substring(0, 30)}..."`);
+            metrics.filtered('inter_guild', 'recent_duplicate');
             return true;
         }
 

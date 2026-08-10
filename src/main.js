@@ -28,6 +28,7 @@ const Config = require("./config/ConfigLoader.js");
 const MinecraftManager = require('./minecraft/MinecraftManager.js');
 const DiscordManager = require('./discord/DiscordManager.js');
 const BridgeLocator = require("./bridgeLocator.js");
+const metrics = require('./shared/BridgeMetrics.js');
 
 /**
  * MainBridge - Core application orchestrator
@@ -127,6 +128,10 @@ class MainBridge {
         const stopStartTime = Date.now();
 
         try {
+            // Report final delivery numbers before tearing anything down
+            metrics.stopSummary();
+            metrics.logSummary();
+
             // Stop Minecraft connections
             if (this._minecraftManager) {
                 await this._minecraftManager.stop();
@@ -447,6 +452,13 @@ class MainBridge {
         try {
             // Log configuration summary
             this.logStartupSummary();
+
+            // Start reporting what the bridge delivers versus what it drops. Every
+            // rejection path used to log at debug only, so in production a lost message
+            // left no trace and the bridge appeared to have a 100% success rate.
+            const summaryInterval = this.config.get('features.metrics.summaryIntervalMs') || 15 * 60 * 1000;
+            metrics.startSummary(summaryInterval);
+            logger.info(`📊 Delivery metrics enabled (summary every ${Math.round(summaryInterval / 60000)} min)`);
 
             logger.logPerformance('Startup finalization', stepStartTime);
             logger.info('✅ Startup finalized');

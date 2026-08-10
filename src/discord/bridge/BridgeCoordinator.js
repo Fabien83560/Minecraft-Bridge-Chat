@@ -43,6 +43,7 @@ const logger = require("../../shared/logger");
 
 const CommandResponseListener = require("../client/handlers/CommandResponseListener.js");
 const kickReasonStore = require("../../shared/KickReasonStore.js");
+const metrics = require("../../shared/BridgeMetrics.js");
 
 /**
  * BridgeCoordinator - Coordinate bidirectional message bridging
@@ -235,14 +236,14 @@ class BridgeCoordinator {
             
             // Skip if Discord manager is not connected
             if (!this.discordManager.isConnected()) {
-                logger.warn(`[MC→DC] Discord not connected, skipping message`);
+                metrics.dropped('mc_to_discord', 'discord_disconnected', `${messageData.username}: ${messageData.message}`);
                 return;
             }
 
             // Get guild configuration
             const guildConfig = this.getGuildConfig(messageData.guildId);
             if (!guildConfig) {
-                logger.warn(`Guild configuration not found for message: ${messageData.guildId}`);
+                metrics.dropped('mc_to_discord', 'guild_config_missing', `guildId ${messageData.guildId}`);
                 return;
             }
 
@@ -304,7 +305,7 @@ class BridgeCoordinator {
             // Get guild configuration
             const guildConfig = this.getGuildConfig(eventData.guildId);
             if (!guildConfig) {
-                logger.warn(`Guild configuration not found for event: ${eventData.guildId}`);
+                metrics.dropped('mc_to_discord', 'guild_config_missing', `event ${eventData.type}, guildId ${eventData.guildId}`);
                 return;
             }
 
@@ -511,7 +512,7 @@ class BridgeCoordinator {
             // Determine target chat type based on Discord channel
             const chatType = this.determineChatTypeFromChannel(messageData.channelType);
             if (!chatType) {
-                logger.debug(`[DC→MC] Unknown channel type: ${messageData.channelType}, skipping message`);
+                metrics.dropped('discord_to_mc', 'unknown_channel_type', `channelType ${messageData.channelType}`);
                 return;
             }
 
@@ -570,7 +571,8 @@ class BridgeCoordinator {
                 // Some deliveries failed
                 await this.handleBridgeError(messageData, firstError, successCount, connectedGuilds.length);
             } else {
-                // All deliveries successful - no success reaction, just log
+                // All deliveries confirmed written to the server, not merely requested
+                metrics.sent('discord_to_mc', 'all_guilds');
                 logger.discord(`[DC→MC] ✅ Discord message bridged successfully to all ${connectedGuilds.length} Minecraft guilds`);
             }
 

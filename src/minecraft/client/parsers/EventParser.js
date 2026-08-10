@@ -59,6 +59,7 @@ const BridgeLocator = require("../../../bridgeLocator.js");
 const MessageCleaner = require("./utils/MessageCleaner.js");
 const EventPatterns = require("./patterns/EventPatterns.js");
 const logger = require("../../../shared/logger");
+const metrics = require("../../../shared/BridgeMetrics.js");
 
 /**
  * EventParser - Parses guild events from Minecraft messages
@@ -154,6 +155,7 @@ class EventParser {
             // Check event cooldown
             if (this.isEventInCooldown(eventMatch, guildConfig)) {
                 logger.debug(`[${guildConfig.name}] Event in cooldown: ${eventMatch.type}`);
+                metrics.filtered('mc_to_discord', `event_cooldown_${eventMatch.type}`);
                 return null;
             }
 

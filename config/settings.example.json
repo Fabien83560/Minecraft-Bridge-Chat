@@ -38,7 +38,7 @@
                 }
             },
             "_comment": "The guild ranks need to be least to greatest, without staff rank",
-            "ranks": [  
+            "ranks": [
                 "BASE_RANK_NAME",
                 "FIRST_RANK_NAME",
                 "SECOND_RANK_NAME",
@@ -76,7 +76,7 @@
                 }
             },
             "_comment": "The guild ranks need to be least to greatest, without staff rank",
-            "ranks": [  
+            "ranks": [
                 "BASE_RANK_NAME",
                 "FIRST_RANK_NAME",
                 "SECOND_RANK_NAME",
@@ -259,6 +259,10 @@
             "batchTimeWindow": 30000,
             "includeSystemInfo": true,
             "suppressDuringMaintenance": false
+        },
+        "metrics": {
+            "_comment": "Periodic delivery summary: sent / filtered / dropped per direction, with a per-reason breakdown for drops.",
+            "summaryIntervalMs": 900000
         }
     },
     "advanced": {

@@ -219,7 +219,16 @@ class MessageFormatter {
             );
 
             if (!template) {
-                logger.warn(`No event template found for ${platform}/${targetGuildConfig.server.serverName}/${eventData.type}`);
+                // 'online' is the /g online command output rather than a guild event, so
+                // it legitimately has no template. Warning on it produced thousands of
+                // entries that buried the warnings that actually mattered.
+                if (!MessageFormatter.NON_BRIDGEABLE_EVENTS.includes(eventData.type)) {
+                    logger.warn(
+                        `No event template found for ${platform}/${targetGuildConfig.server.serverName}/${eventData.type}` +
+                        ` - falling back to basic wording. Raw: "${(eventData.raw || '').substring(0, 120)}"`
+                    );
+                }
+
                 return this.createFallbackEventMessage(eventData, sourceGuildConfig);
             }
 
@@ -724,24 +733,27 @@ class MessageFormatter {
      * or formatting fails. Provides basic event descriptions with optional guild tag
      * display. Returns null if fallbackToBasic is disabled.
      * 
-     * Supported fallback events:
-     * - welcome: "username joined the guild!"
-     * - leave: "username left the guild"
-     * - kick: "username was kicked from the guild"
-     * - promote: "username was promoted to rank"
-     * - demote: "username was demoted to rank"
-     * - level: "Guild reached level X!"
-     * - default: "unknown_event_type"
-     * 
+     * This is a safety net, not a formatting path. Every event type that should reach a
+     * destination has a template in templates.json; reaching this method means a
+     * template is missing, which is why formatGuildEvent logs a warning first. The
+     * fallback covers the same set of types so a missing template degrades the wording
+     * rather than losing the event.
+     *
+     * Types with no meaningful fallback return "unknown_event_type", which callers
+     * treat as "do not send". Only genuinely unbridgeable types should land there.
+     *
      * @param {object} eventData - Event data
      * @param {string} eventData.type - Event type
      * @param {string} [eventData.username] - Username involved
      * @param {string} [eventData.toRank] - New rank (promote/demote)
      * @param {number} [eventData.level] - Guild level (level event)
+     * @param {string} [eventData.changer] - Who changed the MOTD (motd event)
+     * @param {string} [eventData.motd] - New MOTD text (motd event)
+     * @param {string} [eventData.message] - Free-form detail (misc event)
      * @param {object} sourceGuildConfig - Source guild configuration
      * @param {string} sourceGuildConfig.tag - Source guild tag
      * @returns {string|null} Fallback event message or null if disabled
-     * 
+     *
      * @example
      * const fallback = formatter.createFallbackEventMessage(
      *   { type: "promote", username: "Player", toRank: "Officer" },
@@ -756,21 +768,33 @@ class MessageFormatter {
 
         const prefix = this.config.showSourceTag ? `[${sourceGuildConfig.tag}] ` : '';
         const tag = this.config.showTags ? ` [${sourceGuildConfig.tag}]` : '';
-        
+
         switch (eventData.type) {
             case 'welcome':
-                return `${prefix}${eventData.username}${tag} joined the guild!`;
+                return `${prefix}${eventData.username}${tag} a rejoint la guilde !`;
             case 'leave':
-                return `${prefix}${eventData.username}${tag} left the guild`;
+                return `${prefix}${eventData.username}${tag} a quitté la guilde`;
             case 'kick':
-                return `${prefix}${eventData.username}${tag} was kicked from the guild`;
+                return `${prefix}${eventData.username}${tag} a été expulsé de la guilde`;
             case 'promote':
-                return `${prefix}${eventData.username}${tag} was promoted to ${eventData.toRank}`;
+                return `${prefix}${eventData.username}${tag} a été promu au rang ${eventData.toRank}`;
             case 'demote':
-                return `${prefix}${eventData.username}${tag} was demoted to ${eventData.toRank}`;
+                return `${prefix}${eventData.username}${tag} a été rétrogradé au rang ${eventData.toRank}`;
             case 'level':
-                return `${prefix}Guild reached level ${eventData.level}!`;
+                return `${prefix}La guilde a atteint le niveau ${eventData.level} !`;
+            case 'join':
+                return `${prefix}${eventData.username}${tag} s'est connecté`;
+            case 'disconnect':
+                return `${prefix}${eventData.username}${tag} s'est déconnecté`;
+            case 'invite':
+                return `${prefix}${eventData.username}${tag} a été invité dans la guilde`;
+            case 'motd':
+                return `${prefix}${eventData.changer || 'Quelqu\'un'}${tag} a modifié le MOTD : ${eventData.motd || ''}`.trim();
+            case 'misc':
+                return `${prefix}Guilde mise à jour : ${eventData.message || eventData.raw || ''}`.trim();
             default:
+                // 'online' lands here: it is the /g online command output, not a guild
+                // event, and must never be posted to a chat channel.
                 return `unknown_event_type`;
         }
     }
@@ -841,5 +865,18 @@ class MessageFormatter {
         logger.debug('MessageFormatter cache cleared');
     }
 }
+
+/**
+ * Event types that intentionally have no template and must never be bridged
+ *
+ * The event parser classifies some server output as an "event" even though it is not a
+ * guild happening. 'online' is the response body of the /g online command; posting it
+ * to a chat channel would relay a member list every time the command runs. Types listed
+ * here are skipped silently instead of warning about a missing template.
+ *
+ * @type {Array<string>}
+ * @constant
+ */
+MessageFormatter.NON_BRIDGEABLE_EVENTS = ['online'];
 
 module.exports = MessageFormatter;

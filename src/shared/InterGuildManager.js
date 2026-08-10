@@ -52,6 +52,7 @@
 const logger = require('./logger');
 const MessageFormatter = require('./MessageFormatter.js');
 const BridgeLocator = require('../bridgeLocator.js');
+const metrics = require('./BridgeMetrics.js');
 
 /**
  * InterGuildManager - Manage cross-guild message and event broadcasting
@@ -284,12 +285,9 @@ class InterGuildManager {
                 return;
             }
 
-            // Check rate limiting
-            if (this.isRateLimited(sourceGuildConfig.id)) {
-                logger.debug(`[${sourceGuildConfig.name}] Message rate limited`);
-                return;
-            }
-
+            // No rate-limit drop here any more. Pacing is owned by each bot's ChatQueue,
+            // which delays writes instead of discarding them; dropping at this layer
+            // silently lost guild chat during busy periods.
             const messageType = messageData.chatType === 'officer' ? 'guild message (from officer chat)' : 'guild message';
             logger.bridge(`[INTER-GUILD] Processing ${messageType} from ${sourceGuildConfig.name} to ${targetGuilds.length} target guilds`);
 
@@ -365,12 +363,7 @@ class InterGuildManager {
                 return;
             }
 
-            // Check rate limiting
-            if (this.isRateLimited(sourceGuildConfig.id)) {
-                logger.debug(`[${sourceGuildConfig.name}] Officer message rate limited`);
-                return;
-            }
-
+            // Pacing is owned by each bot's ChatQueue - see processGuildMessage
             logger.bridge(`[INTER-GUILD] Processing officer message from ${sourceGuildConfig.name} to ${targetGuilds.length} target guilds`);
 
             this.trackMessage(messageData, sourceGuildConfig);
@@ -450,32 +443,23 @@ class InterGuildManager {
         // CRITICAL: Always filter our own bot messages first
         if (username.toLowerCase() === botUsername.toLowerCase()) {
             logger.debug(`[${sourceGuildConfig.name}] ✅ FILTERED own bot ${chatType} message: ${username} -> "${message.substring(0, 50)}..."`);
+            metrics.filtered('inter_guild', 'own_bot_message');
             return true;
         }
 
-        // Pattern 1 - Check for obvious relay patterns
-        const relayPatterns = [
-            /^(\w+):\s*(.+)$/,                    // "User: message"
-            /^(\w+):\s*\1:\s*(.+)$/,             // "User: User: message"
-            /^(\w+):\s*(\w+):\s*(.+)$/,          // "User1: User2: message"
-            /^\[[\w\d]+\]\s+(\w+):\s*(.+)$/,     // "[TAG] User: message"
-            /^\[[\w\d]+\]\s+(\w+)\s+\[.*?\]:\s*(.+)$/,  // "[TAG] User [Rank]: message"
-        ];
-
-        // Officer-specific relay patterns
-        if (chatType === 'officer') {
-            relayPatterns.push(
-                /^\[[\w\d]+\]\s+\[OFFICER\]\s+(\w+):\s*(.+)$/,     // "[TAG] [OFFICER] User: message"
-                /^\[.*?\]\s+(\w+)\s+\[(?:Officer|Admin|Owner)\]:\s*(.+)$/i,  // "[TAG] User [Officer]: message"
-            );
-        }
-
-        for (let i = 0; i < relayPatterns.length; i++) {
-            const pattern = relayPatterns[i];
-            if (pattern.test(message)) {
-                logger.debug(`[${sourceGuildConfig.name}] ✅ FILTERED ${chatType} relay pattern ${i}: "${message.substring(0, 50)}..."`);
-                return true;
-            }
+        // A block of content-shape relay patterns used to run here, matching things like
+        // /^(\w+):\s*(.+)$/ against the message body. Because the own-bot check above
+        // returns early, that block could only ever be reached by a real player's
+        // message - so it produced false positives exclusively. Any player writing
+        // "edit: je voulais dire X" or "info: ..." had their message silently dropped
+        // from the inter-guild relay.
+        //
+        // The genuine signal for a relay is the sender being one of the bridge's own bot
+        // accounts, which is what isBridgeBotRelay checks.
+        if (this.isBridgeBotRelay(username, message, sourceGuildConfig)) {
+            logger.debug(`[${sourceGuildConfig.name}] ✅ FILTERED ${chatType} relay from bridge bot ${username}`);
+            metrics.filtered('inter_guild', 'bridge_bot_relay');
+            return true;
         }
 
         // Pattern 2 - Check message history for this guild
@@ -492,6 +476,7 @@ class InterGuildManager {
 
         if (recentDuplicate) {
             logger.debug(`[${sourceGuildConfig.name}] ✅ FILTERED ${chatType} recent duplicate: ${username} -> "${message.substring(0, 30)}..."`);
+            metrics.filtered('inter_guild', 'recent_duplicate');
             return true;
         }
 
@@ -525,8 +510,69 @@ class InterGuildManager {
     }
 
     /**
+     * Check whether a message is another bridge bot relaying content
+     *
+     * The real loop risk is one of the bridge's own bot accounts echoing content that
+     * originated elsewhere. Every configured guild runs its own bot, so a message whose
+     * sender matches any of those accounts is a relay by definition - the guild's human
+     * members never use those names.
+     *
+     * As a second signal, a message body prefixed with a configured guild tag (the
+     * "[V1] " form this bridge emits) is treated as relayed content regardless of
+     * sender, since only the bridge produces that prefix.
+     *
+     * @param {string} username - Sender of the message
+     * @param {string} message - Message body
+     * @param {object} sourceGuildConfig - Source guild configuration
+     * @param {string} sourceGuildConfig.name - Guild name for logging
+     * @returns {boolean} Whether the message is bridge-relayed content
+     *
+     * @example
+     * manager.isBridgeBotRelay('FrenchLegacyV2', '[V1] Player: salut', guildConfig);
+     * // Returns: true
+     *
+     * @example
+     * manager.isBridgeBotRelay('Player', 'edit: je voulais dire X', guildConfig);
+     * // Returns: false - a real player, previously dropped as a false positive
+     */
+    isBridgeBotRelay(username, message, sourceGuildConfig) {
+        try {
+            const allGuilds = this.config.getEnabledGuilds() || [];
+
+            // Sender is one of our own bridge bot accounts
+            const isBridgeBot = allGuilds.some(guild =>
+                guild.account?.username &&
+                guild.account.username.toLowerCase() === username.toLowerCase()
+            );
+
+            if (isBridgeBot) {
+                return true;
+            }
+
+            // Body carries a source tag this bridge emits, e.g. "[V1] Player: text"
+            const tags = allGuilds
+                .map(guild => guild.tag)
+                .filter(Boolean)
+                .map(tag => tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+
+            if (tags.length > 0) {
+                const tagPattern = new RegExp(`^\\[(?:${tags.join('|')})\\]\\s`, 'i');
+                if (tagPattern.test(message)) {
+                    return true;
+                }
+            }
+
+            return false;
+
+        } catch (error) {
+            logger.logError(error, `Error checking bridge bot relay for ${sourceGuildConfig.name}`);
+            return false;
+        }
+    }
+
+    /**
      * Track message for loop detection
-     * 
+     *
      * Adds message to guild's message history for duplicate detection. Maintains
      * a sliding window of the last 10 messages per guild-chatType combination.
      * 
@@ -1036,13 +1082,24 @@ class InterGuildManager {
     async processQueue() {
         while (this.isProcessingQueue) {
             try {
-                if (this.messageQueue.length > 0) {
-                    const messageItem = this.messageQueue.shift();
-                    await this.deliverQueuedMessage(messageItem);
+                if (this.messageQueue.length === 0) {
+                    await this.wait(200); // Idle poll
+                    continue;
                 }
 
-                // Wait before processing next message
-                await this.wait(1000); // 1 second between messages
+                const messageItem = this.messageQueue.shift();
+
+                // Dispatch without awaiting delivery. Each target guild has its own
+                // ChatQueue that paces that bot independently, so awaiting here would
+                // force all guilds to share a single global send rate - which is what
+                // the old fixed 1s sleep did, throttling three bots down to one bot's
+                // worth of throughput.
+                this.deliverQueuedMessage(messageItem).catch(error => {
+                    logger.logError(error, `[INTER-GUILD] Delivery failed for ${messageItem.targetGuild}`);
+                });
+
+                // Small yield so a large burst does not block the event loop
+                await this.wait(20);
 
             } catch (error) {
                 logger.logError(error, 'Error in queue processor');
@@ -1100,18 +1157,25 @@ class InterGuildManager {
                         this.messageQueue.push(messageItem);
                     }, 5000); // Try again in 5 seconds
                     return;
-                } else {
-                    logger.warn(`[${messageItem.targetGuild}] Max attempts reached, dropping message`);
-                    return;
                 }
+
+                metrics.dropped(
+                    'inter_guild',
+                    'target_never_connected',
+                    `${messageItem.targetGuild}: ${messageItem.message.substring(0, 60)}`
+                );
+                return;
             }
 
-            // Send the message based on type
+            // Send the message based on type. These awaits now resolve when the bot has
+            // actually written to the server, not when the write was merely requested.
+            const options = { direction: 'inter_guild' };
+
             if (messageItem.type === 'officer_message') {
-                await messageItem.minecraftManager.sendOfficerMessage(messageItem.guildId, messageItem.message);
+                await messageItem.minecraftManager.sendOfficerMessage(messageItem.guildId, messageItem.message, options);
                 logger.bridge(`[INTER-GUILD] Delivered officer message to ${messageItem.targetGuild}: "${messageItem.message}"`);
             } else {
-                await messageItem.minecraftManager.sendMessage(messageItem.guildId, messageItem.message);
+                await messageItem.minecraftManager.sendMessage(messageItem.guildId, messageItem.message, options);
                 logger.bridge(`[INTER-GUILD] Delivered ${messageItem.type} to ${messageItem.targetGuild}: "${messageItem.message}"`);
             }
 
@@ -1122,7 +1186,11 @@ class InterGuildManager {
                     this.messageQueue.push(messageItem);
                 }, 2000 * messageItem.attempts); // Exponential backoff
             } else {
-                logger.logError(error, `[${messageItem.targetGuild}] Max attempts reached, dropping message`);
+                metrics.dropped(
+                    'inter_guild',
+                    'max_attempts',
+                    `${messageItem.targetGuild}: ${error.message}`
+                );
             }
         }
     }

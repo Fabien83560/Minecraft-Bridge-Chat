@@ -54,6 +54,7 @@ const WebhookSender = require("./WebhookSender.js");
 const EmbedBuilder = require("../../utils/EmbedBuilder.js");
 const BotStatusPanel = require("../BotStatusPanel.js");
 const logger = require("../../../shared/logger");
+const metrics = require("../../../shared/BridgeMetrics.js");
 
 /**
  * MessageSender - Manages message delivery to Discord
@@ -88,6 +89,14 @@ class MessageSender {
         // Rate limiting
         this.rateLimiter = new Map(); // channelId -> last message times
         this.rateLimit = this.config.get('bridge.rateLimit.discord') || { limit: 5, window: 10000 };
+
+        // Serializes slot acquisition per channel. Without this, every concurrent
+        // sender evaluated isRateLimited() before any of them called updateRateLimit(),
+        // so the limiter under-counted badly - and when it did trigger it discarded the
+        // message outright. Callers now queue behind each other and wait for a slot.
+        this._slotChains = new Map(); // channelId -> tail promise
+        this._pendingPerChannel = new Map(); // channelId -> waiting sender count
+        this.maxPendingPerChannel = this.config.get('bridge.rateLimit.discordMaxPending') || 500;
 
         // Initialize only the components that don't require Discord client
         this.initializeComponents();
@@ -274,33 +283,29 @@ class MessageSender {
                 throw new Error(`Discord ${channelType} channel not available`);
             }
 
-            // Check rate limiting
-            if (this.isRateLimited(channel.id)) {
-                logger.warn(`Rate limit hit for Discord channel ${channel.name}`);
-                return null;
-            }
-
             // Get formatted message
             const formattedMessage = this.messageFormatter.formatGuildMessage(messageData, guildConfig, guildConfig, 'messagesToDiscord');
             if (!formattedMessage) {
-                logger.warn(`No formatted message generated for Discord`);
+                metrics.dropped('mc_to_discord', 'format_failed', `${messageData.username}: ${messageData.message}`);
                 return null;
             }
+
+            // Wait for a slot instead of discarding the message when the channel is busy
+            await this.acquireSendSlot(channel.id, 'mc_to_discord');
 
             let result;
 
             // Use webhook if available and preferred
-            if (this.webhookSender && this.webhookSender.hasWebhook(channelType) && 
+            if (this.webhookSender && this.webhookSender.hasWebhook(channelType) &&
                 this.config.get('bridge.webhook.useForGuildMessages') !== false) {
-                
+
                 result = await this.sendViaWebhook(messageData, guildConfig, channelType);
+                metrics.sent('mc_to_discord', 'webhook');
             } else {
                 // Send via regular channel
                 result = await this.sendViaChannel(formattedMessage, channel);
+                metrics.sent('mc_to_discord', 'channel');
             }
-
-            // Update rate limiting
-            this.updateRateLimit(channel.id);
 
             logger.discord(`[DISCORD] Sent guild message to ${channelType} channel: "${formattedMessage}"`);
 
@@ -339,25 +344,34 @@ class MessageSender {
                 throw new Error('Discord chat channel not available');
             }
 
-            // Check rate limiting
-            if (this.isRateLimited(channel.id)) {
-                logger.warn(`Rate limit hit for Discord channel ${channel.name}`);
-                return null;
-            }
-
             // Get formatted message
             const formattedMessage = this.messageFormatter.formatGuildEvent(eventData, guildConfig, guildConfig, 'messagesToDiscord');
 
             if (!formattedMessage || formattedMessage === "unknown_event_type") {
-                logger.debug(`No formatted event message generated for Discord`);
+                // Non-bridgeable types (the /g online listing) are expected here and are
+                // filtered, not lost. Anything else reaching this point is a real gap in
+                // the templates and must be visible.
+                const isExpected = MessageFormatter.NON_BRIDGEABLE_EVENTS.includes(eventData.type);
+
+                if (isExpected) {
+                    metrics.filtered('mc_to_discord', `non_bridgeable_${eventData.type}`);
+                } else {
+                    metrics.dropped(
+                        'mc_to_discord',
+                        `no_template_${eventData.type}`,
+                        (eventData.raw || '').substring(0, 120)
+                    );
+                }
+
                 return null;
             }
 
+            // Wait for a slot instead of discarding the event when the channel is busy
+            await this.acquireSendSlot(channel.id, 'mc_to_discord');
+
             // Send the message
             const result = await this.sendViaChannel(formattedMessage, channel);
-
-            // Update rate limiting
-            this.updateRateLimit(channel.id);
+            metrics.sent('mc_to_discord', `event_${eventData.type}`);
 
             logger.discord(`[DISCORD] Sent event to chat channel: "${formattedMessage}"`);
 
@@ -395,19 +409,16 @@ class MessageSender {
                 throw new Error(`Discord ${channelType} channel not available`);
             }
 
-            // Check rate limiting
-            if (this.isRateLimited(channel.id)) {
-                logger.warn(`Rate limit hit for Discord channel ${channel.name}`);
-                return null;
-            }
-
             // Get formatted system message
             const formattedMessage = this.messageFormatter.formatSystem(type, data, 'discord');
 
             if (!formattedMessage) {
-                logger.warn(`[DISCORD] No formatted system message generated for ${type}`);
+                metrics.dropped('mc_to_discord', `no_system_template_${type}`);
                 return null;
             }
+
+            // Wait for a slot instead of discarding the notification
+            await this.acquireSendSlot(channel.id, 'mc_to_discord');
 
             // Send via channel
             const result = await this.sendViaChannel(formattedMessage, channel);
@@ -579,11 +590,97 @@ class MessageSender {
     // ==================== RATE LIMITING ====================
 
     /**
+     * Wait until the channel has a free rate-limit slot, then claim it
+     *
+     * Replaces the previous check-and-drop behaviour. Callers are chained per channel so
+     * exactly one evaluates the limit at a time, which both removes the check-then-await
+     * race and guarantees a message is delayed rather than discarded when the channel is
+     * busy.
+     *
+     * A message is only refused when the backlog for a channel exceeds
+     * maxPendingPerChannel, which means Discord has been unreachable long enough that
+     * queueing further messages would just grow memory. That case is accounted as a
+     * real drop.
+     *
+     * @async
+     * @param {string} channelId - Channel to acquire a send slot on
+     * @param {string} [direction='mc_to_discord'] - Metrics direction for accounting
+     * @returns {Promise<void>} Resolves once a slot is claimed
+     * @throws {Error} If the channel backlog is over the limit
+     *
+     * @example
+     * await sender.acquireSendSlot(channel.id);
+     * await channel.send(payload);
+     */
+    async acquireSendSlot(channelId, direction = 'mc_to_discord') {
+        const pending = this._pendingPerChannel.get(channelId) || 0;
+
+        if (pending >= this.maxPendingPerChannel) {
+            metrics.dropped(direction, 'discord_backlog_full', `channel ${channelId}, ${pending} waiting`);
+            throw new Error(`Discord send backlog full for channel ${channelId} (${pending} waiting)`);
+        }
+
+        this._pendingPerChannel.set(channelId, pending + 1);
+
+        const previous = this._slotChains.get(channelId) || Promise.resolve();
+
+        const current = previous.then(async () => {
+            // Wait out the window rather than dropping the message
+            while (this.isRateLimited(channelId)) {
+                await this.wait(this.timeUntilSlotFree(channelId));
+            }
+
+            this.updateRateLimit(channelId);
+        });
+
+        // Keep the chain alive even if one waiter throws
+        this._slotChains.set(channelId, current.catch(() => {}));
+
+        try {
+            await current;
+        } finally {
+            this._pendingPerChannel.set(channelId, (this._pendingPerChannel.get(channelId) || 1) - 1);
+        }
+    }
+
+    /**
+     * Compute how long until the channel's oldest send falls out of the window
+     *
+     * @param {string} channelId - Channel ID to check
+     * @returns {number} Milliseconds to wait, minimum 50ms to avoid a busy loop
+     *
+     * @example
+     * const delay = sender.timeUntilSlotFree(channel.id);
+     */
+    timeUntilSlotFree(channelId) {
+        const times = this.rateLimiter.get(channelId) || [];
+
+        if (times.length === 0) {
+            return 50;
+        }
+
+        const oldest = Math.min(...times);
+        const remaining = this.rateLimit.window - (Date.now() - oldest);
+
+        return Math.max(50, remaining);
+    }
+
+    /**
+     * Wait for a number of milliseconds
+     *
+     * @param {number} ms - Milliseconds to wait
+     * @returns {Promise<void>}
+     */
+    wait(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    /**
      * Check if channel is rate limited
-     * 
+     *
      * Determines if the channel has exceeded the configured message rate limit.
      * Automatically cleans up old timestamps outside the rate limit window.
-     * 
+     *
      * @param {string} channelId - Channel ID to check
      * @returns {boolean} True if channel is rate limited
      */

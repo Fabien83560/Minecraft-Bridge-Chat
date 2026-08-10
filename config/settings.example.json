@@ -38,7 +38,7 @@
                 }
             },
             "_comment": "The guild ranks need to be least to greatest, without staff rank",
-            "ranks": [  
+            "ranks": [
                 "BASE_RANK_NAME",
                 "FIRST_RANK_NAME",
                 "SECOND_RANK_NAME",
@@ -76,7 +76,7 @@
                 }
             },
             "_comment": "The guild ranks need to be least to greatest, without staff rank",
-            "ranks": [  
+            "ranks": [
                 "BASE_RANK_NAME",
                 "FIRST_RANK_NAME",
                 "SECOND_RANK_NAME",
@@ -136,7 +136,25 @@
             "events": {
                 "limit": 10,
                 "window": 60000
-            }
+            },
+            "discordMaxPending": 500
+        },
+        "minecraftQueue": {
+            "_comment": "Serialized outbound chat per bot. Every write to a bot account (Discord bridging, inter-guild relay, slash commands) goes through one queue so two writers can never collide inside the same tick and get silently discarded by Hypixel.",
+            "minIntervalMs": 1200,
+            "jitterMs": 250,
+            "maxSize": 200,
+            "antiDuplicate": true,
+            "duplicateSuffix": "ᐧ",
+            "duplicateWindowMs": 60000
+        },
+        "events": {
+            "_comment": "Event types that produce no Discord output at all - not in the chat channel, not in the event log channels, not in the detection channel. Defaults cover the high-volume connect/disconnect notifications ('join'/'disconnect') and the /g online listing ('online'). Remove an entry to start surfacing it. Inter-guild relaying is controlled separately by bridge.interGuild.shareableEvents.",
+            "excludeFromDiscord": [
+                "online",
+                "join",
+                "disconnect"
+            ]
         }
     },
     "discord": {
@@ -259,6 +277,10 @@
             "batchTimeWindow": 30000,
             "includeSystemInfo": true,
             "suppressDuringMaintenance": false
+        },
+        "metrics": {
+            "_comment": "Periodic delivery summary: sent / filtered / dropped per direction, with a per-reason breakdown for drops.",
+            "summaryIntervalMs": 900000
         }
     },
     "advanced": {

@@ -597,13 +597,15 @@ class BotManager extends EventEmitter {
      * 
      * @param {string} guildId - Guild ID to send to
      * @param {string} message - Message to send
-     * @returns {Promise<void>}
+     * @param {object} [options={}] - Delivery options forwarded to the connection queue
+     * @param {string} [options.direction='inter_guild'] - Metrics direction for accounting
+     * @returns {Promise<void>} Settles once the message is written to the server
      * @throws {Error} If guild not found, not connected, or send fails
-     * 
+     *
      * @example
      * await botManager.sendMessage('guild1', 'Hello from another guild!');
      */
-    async sendMessage(guildId, message) {
+    async sendMessage(guildId, message, options = {}) {
         const connection = this.connections.get(guildId);
         if (!connection) {
             const error = `No connection found for guild: ${guildId}`;
@@ -617,10 +619,10 @@ class BotManager extends EventEmitter {
             throw new Error(error);
         }
 
-        logger.bridge(`[INTER-GUILD] BotManager sending guild message to ${guildId}: "${message}"`);
-        
+        logger.bridge(`[INTER-GUILD] BotManager queueing guild message for ${guildId}: "${message}"`);
+
         try {
-            const result = await connection.sendMessage(message);
+            const result = await connection.sendMessage(message, options);
             logger.bridge(`[INTER-GUILD] Guild message sent successfully to ${connection.getGuildConfig().name}`);
             return result;
         } catch (error) {
@@ -638,13 +640,15 @@ class BotManager extends EventEmitter {
      * 
      * @param {string} guildId - Guild ID to send to
      * @param {string} message - Message to send
-     * @returns {Promise<void>}
+     * @param {object} [options={}] - Delivery options forwarded to the connection queue
+     * @param {string} [options.direction='inter_guild'] - Metrics direction for accounting
+     * @returns {Promise<void>} Settles once the message is written to the server
      * @throws {Error} If guild not found, not connected, or send fails
-     * 
+     *
      * @example
      * await botManager.sendOfficerMessage('guild1', 'Officer announcement');
      */
-    async sendOfficerMessage(guildId, message) {
+    async sendOfficerMessage(guildId, message, options = {}) {
         const connection = this.connections.get(guildId);
         if (!connection) {
             const error = `No connection found for guild: ${guildId}`;
@@ -658,10 +662,10 @@ class BotManager extends EventEmitter {
             throw new Error(error);
         }
 
-        logger.bridge(`[INTER-GUILD] BotManager sending officer message to ${guildId}: "${message}"`);
-        
+        logger.bridge(`[INTER-GUILD] BotManager queueing officer message for ${guildId}: "${message}"`);
+
         try {
-            const result = await connection.sendOfficerMessage(message);
+            const result = await connection.sendOfficerMessage(message, options);
             logger.bridge(`[INTER-GUILD] Officer message sent successfully to ${connection.getGuildConfig().name}`);
             return result;
         } catch (error) {
@@ -678,13 +682,16 @@ class BotManager extends EventEmitter {
      * 
      * @param {string} guildId - Guild ID to execute on
      * @param {string} command - Command to execute (including /)
-     * @returns {Promise<void>}
+     * @param {object} [options={}] - Delivery options forwarded to the connection queue
+     * @param {string} [options.priority='command'] - Queue lane ('command' or 'chat')
+     * @param {string} [options.direction='discord_to_mc'] - Metrics direction for accounting
+     * @returns {Promise<void>} Settles once the command is written to the server
      * @throws {Error} If guild not found or not connected
-     * 
+     *
      * @example
      * await botManager.executeCommand('guild1', '/g online');
      */
-    async executeCommand(guildId, command) {
+    async executeCommand(guildId, command, options = {}) {
         const connection = this.connections.get(guildId);
         if (!connection) {
             throw new Error(`No connection found for guild: ${guildId}`);
@@ -694,7 +701,29 @@ class BotManager extends EventEmitter {
             throw new Error(`Guild ${guildId} is not connected`);
         }
 
-        return connection.executeCommand(command);
+        return connection.executeCommand(command, options);
+    }
+
+    /**
+     * Get outbound queue statistics for every guild
+     *
+     * Surfaces per-bot queue depth so a backlog can be spotted before it turns into
+     * dropped messages.
+     *
+     * @returns {object} Queue statistics keyed by guild ID
+     *
+     * @example
+     * const stats = botManager.getQueueStats();
+     * Object.values(stats).forEach(s => console.log(`${s.guildName}: ${s.chatDepth}`));
+     */
+    getQueueStats() {
+        const stats = {};
+
+        for (const [guildId, connection] of this.connections) {
+            stats[guildId] = connection.getQueueStats();
+        }
+
+        return stats;
     }
 
     /**

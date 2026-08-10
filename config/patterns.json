@@ -758,6 +758,14 @@
             "description": "Member leave events"
           },
           {
+            "pattern": "^(?:Guild|G) > \\w+ joined\\.$",
+            "description": "Member came online - excluded from chat by isJoinLeaveMessage, so it must be detected here or it is dropped entirely"
+          },
+          {
+            "pattern": "^(?:Guild|G) > \\w+ left\\.$",
+            "description": "Member went offline - excluded from chat by isJoinLeaveMessage, so it must be detected here or it is dropped entirely"
+          },
+          {
             "pattern": "was kicked from the guild",
             "description": "Member kick events"
           },

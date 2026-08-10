@@ -16,10 +16,10 @@
         },
         "events": {
           "join": {
-            "basic": "{username} a rejoint la guilde !",
-            "withTag": "{username} {tag} a rejoint la guilde !",
-            "withSourceTag": "[{sourceGuildTag}] {username} a rejoint la guilde !",
-            "withBothTags": "[{sourceGuildTag}] {username} {tag} a rejoint la guilde !"
+            "basic": "{username} s'est connecté",
+            "withTag": "{username} {tag} s'est connecté",
+            "withSourceTag": "[{sourceGuildTag}] {username} s'est connecté",
+            "withBothTags": "[{sourceGuildTag}] {username} {tag} s'est connecté"
           },
           "leave": {
             "basic": "{username} a quitté la guilde",
@@ -62,6 +62,24 @@
             "withTag": "{changer} {tag} a modifié le MOTD de la guilde en : {motd}",
             "withSourceTag": "[{sourceGuildTag}] {changer} a modifié le MOTD de la guilde en : {motd}",
             "withBothTags": "[{sourceGuildTag}] {changer} {tag} a modifié le MOTD de la guilde en : {motd}"
+          },
+          "disconnect": {
+            "basic": "{username} s'est déconnecté",
+            "withTag": "{username} {tag} s'est déconnecté",
+            "withSourceTag": "[{sourceGuildTag}] {username} s'est déconnecté",
+            "withBothTags": "[{sourceGuildTag}] {username} {tag} s'est déconnecté"
+          },
+          "invite": {
+            "basic": "{username} a été invité dans la guilde",
+            "withTag": "{username} {tag} a été invité dans la guilde",
+            "withSourceTag": "[{sourceGuildTag}] {username} a été invité dans la guilde",
+            "withBothTags": "[{sourceGuildTag}] {username} {tag} a été invité dans la guilde"
+          },
+          "misc": {
+            "basic": "Guilde mise à jour : {message}",
+            "withTag": "Guilde mise à jour : {message}",
+            "withSourceTag": "[{sourceGuildTag}] Guilde mise à jour : {message}",
+            "withBothTags": "[{sourceGuildTag}] Guilde mise à jour : {message}"
           }
         },
         "system": {
@@ -105,10 +123,10 @@
         },
         "events": {
           "join": {
-            "basic": "**{username} a rejoint la guilde !** 👋",
-            "withTag": "**{username}** `{tag}` **a rejoint la guilde !** 👋",
-            "withSourceTag": "**[{sourceGuildTag}]** **{username} a rejoint la guilde !** 👋",
-            "withBothTags": "**[{sourceGuildTag}]** **{username}** `{tag}` **a rejoint la guilde !** 👋"
+            "basic": "**{username}** s'est connecté 🟢",
+            "withTag": "**{username}** `{tag}` s'est connecté 🟢",
+            "withSourceTag": "**[{sourceGuildTag}]** **{username}** s'est connecté 🟢",
+            "withBothTags": "**[{sourceGuildTag}]** **{username}** `{tag}` s'est connecté 🟢"
           },
           "leave": {
             "basic": "**{username} a quitté la guilde** 👋",
@@ -145,6 +163,30 @@
             "withTag": "**{changer}** `{tag}` **a modifié le MOTD de la guilde en :** {motd}",
             "withSourceTag": "**[{sourceGuildTag}]** **{changer} a modifié le MOTD de la guilde en :** {motd}",
             "withBothTags": "**[{sourceGuildTag}]** **{changer}** `{tag}` **a modifié le MOTD de la guilde en :** {motd}"
+          },
+          "disconnect": {
+            "basic": "**{username}** s'est déconnecté 🔴",
+            "withTag": "**{username}** `{tag}` s'est déconnecté 🔴",
+            "withSourceTag": "**[{sourceGuildTag}]** **{username}** s'est déconnecté 🔴",
+            "withBothTags": "**[{sourceGuildTag}]** **{username}** `{tag}` s'est déconnecté 🔴"
+          },
+          "welcome": {
+            "basic": "**{username} a rejoint la guilde !** 🎉",
+            "withTag": "**{username}** `{tag}` **a rejoint la guilde !** 🎉",
+            "withSourceTag": "**[{sourceGuildTag}]** **{username} a rejoint la guilde !** 🎉",
+            "withBothTags": "**[{sourceGuildTag}]** **{username}** `{tag}` **a rejoint la guilde !** 🎉"
+          },
+          "invite": {
+            "basic": "**{username} a été invité dans la guilde** ✉️",
+            "withTag": "**{username}** `{tag}` **a été invité dans la guilde** ✉️",
+            "withSourceTag": "**[{sourceGuildTag}]** **{username} a été invité dans la guilde** ✉️",
+            "withBothTags": "**[{sourceGuildTag}]** **{username}** `{tag}` **a été invité dans la guilde** ✉️"
+          },
+          "misc": {
+            "basic": "**Guilde mise à jour :** {message}",
+            "withTag": "**Guilde mise à jour :** {message}",
+            "withSourceTag": "**[{sourceGuildTag}]** **Guilde mise à jour :** {message}",
+            "withBothTags": "**[{sourceGuildTag}]** **Guilde mise à jour :** {message}"
           }
         },
         "system": {
@@ -212,7 +254,10 @@
     "lastUpdated": "2025-01-15",
     "description": "Modèles de messages pour la communication inter-guildes et Discord",
     "author": "Minecraft-Bridge-Chat",
-    "supportedPlatforms": ["minecraft", "discord"],
+    "supportedPlatforms": [
+      "minecraft",
+      "discord"
+    ],
     "templateFormat": {
       "placeholders": "Variables entourées d'accolades {variable}",
       "conditionalContent": "Contenu optionnel selon la configuration",

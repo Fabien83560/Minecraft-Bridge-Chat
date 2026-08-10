@@ -320,13 +320,22 @@ class BridgeCoordinator {
 
             // Check if Discord manager is ready
             if (!this.discordManager.isConnected()) {
-                logger.warn(`[MC→DC] Discord not connected, skipping event`);
+                metrics.dropped('mc_to_discord', 'discord_disconnected', `event ${eventData.type}`);
                 return;
             }
 
-            // Send to Discord chat (existing functionality)
+            // Drop excluded event types before any Discord output. Connection
+            // notifications (join/disconnect) and the /g online listing are high volume;
+            // gating only the chat channel still let them through to the event log
+            // channel as embeds, which is not what "excluded" should mean.
+            if (this.isEventExcludedFromDiscord(eventData.type)) {
+                logger.debug(`[MC→DC] Event type ${eventData.type} excluded from Discord by configuration`);
+                metrics.filtered('mc_to_discord', `excluded_${eventData.type}`);
+                return;
+            }
+
             logger.debug(`[MC→DC] Sending event to Discord chat...`);
-            const result = await this.discordManager.sendGuildEvent(eventData, guildConfig);
+            await this.discordManager.sendGuildEvent(eventData, guildConfig);
 
             await this.sendDetectionNotification(eventData, guildConfig);
 
@@ -677,8 +686,40 @@ class BridgeCoordinator {
     }
 
     /**
+     * Check whether an event type is excluded from every Discord destination
+     *
+     * Reads bridge.events.excludeFromDiscord. Excluded types reach neither the chat
+     * channel, nor the event log channels, nor the detection channel - "excluded" means
+     * the event produces no Discord output at all.
+     *
+     * The default covers the high-volume connection notifications (a member coming
+     * online or going offline) and the /g online listing, which together account for
+     * thousands of events per day across three guilds.
+     *
+     * Inter-guild relaying is governed separately by bridge.interGuild.shareableEvents
+     * and is not affected by this setting.
+     *
+     * The legacy key excludeFromDiscordChat is still honoured so an already-deployed
+     * configuration keeps working after an upgrade.
+     *
+     * @param {string} eventType - Event type to check
+     * @returns {boolean} Whether the event should produce no Discord output
+     *
+     * @example
+     * coordinator.isEventExcludedFromDiscord('join');    // true by default
+     * coordinator.isEventExcludedFromDiscord('promote'); // false
+     */
+    isEventExcludedFromDiscord(eventType) {
+        const excluded = this.config.get('bridge.events.excludeFromDiscord')
+            || this.config.get('bridge.events.excludeFromDiscordChat')
+            || ['online', 'join', 'disconnect'];
+
+        return excluded.includes(eventType);
+    }
+
+    /**
      * Determine chat type from Discord channel type
-     * 
+     *
      * Maps Discord channel types to Minecraft chat types. Used to route Discord
      * messages to the appropriate Minecraft chat (/gc for guild, /oc for officer).
      * 
@@ -776,6 +817,71 @@ class BridgeCoordinator {
     }
 
     /**
+     * Handle a failed or partial Discord to Minecraft delivery
+     *
+     * Reports a bridging failure back to the Discord user who sent the message and
+     * records it in the metrics. Distinguishes a total failure (nothing was delivered)
+     * from a partial one (some guilds received the message, others did not) so the
+     * reaction reflects what actually happened.
+     *
+     * This method previously did not exist while being called from four places in this
+     * class. Every call threw a TypeError, and because one of those calls sits inside
+     * the catch block of handleDiscordMessage, the TypeError escaped the async function
+     * as an unhandled rejection - which main.js turns into process.exit(1). Any partial
+     * delivery failure therefore killed the whole bridge.
+     *
+     * @async
+     * @param {object} messageData - Discord message data being bridged
+     * @param {object} [messageData.messageRef] - Discord.js message object for reactions
+     * @param {object} messageData.author - Message author information
+     * @param {Error} error - The error that caused the failure
+     * @param {number} successCount - Number of guilds that received the message
+     * @param {number} totalGuilds - Number of guilds that should have received it
+     *
+     * @example
+     * await coordinator.handleBridgeError(messageData, error, 2, 3);
+     * // Adds a ⚠️ reaction: 2 of 3 guilds got the message
+     */
+    async handleBridgeError(messageData, error, successCount, totalGuilds) {
+        try {
+            const isPartial = successCount > 0 && successCount < totalGuilds;
+            const reason = isPartial ? 'partial_delivery' : 'delivery_failed';
+
+            metrics.dropped(
+                'discord_to_mc',
+                reason,
+                `${successCount}/${totalGuilds} guilds - ${error?.message || 'unknown error'}`
+            );
+
+            if (isPartial) {
+                logger.warn(
+                    `[DC→MC] Partial delivery: ${successCount}/${totalGuilds} guilds received the message ` +
+                    `from ${messageData?.author?.username || 'unknown'} - ${error?.message || 'unknown error'}`
+                );
+            } else {
+                logger.warn(
+                    `[DC→MC] Delivery failed for message from ${messageData?.author?.username || 'unknown'} ` +
+                    `- ${error?.message || 'unknown error'}`
+                );
+            }
+
+            // Give the sender visible feedback: ⚠️ when it partly went through,
+            // ❌ when nothing did
+            const reaction = isPartial ? '⚠️' : '❌';
+            const target = messageData?.messageRef || messageData?.message;
+
+            if (target && typeof target.react === 'function') {
+                await target.react(reaction);
+            }
+
+        } catch (reactionError) {
+            // Never let error reporting become a new source of failure - this method is
+            // called from inside catch blocks
+            logger.debug(`Failed to report bridge error to Discord: ${reactionError.message}`);
+        }
+    }
+
+    /**
      * Send event log to Discord channel
      * 
      * Sends a formatted embed log of a guild event to the appropriate Discord log channel.
@@ -852,71 +958,6 @@ class BridgeCoordinator {
 
         } catch (error) {
             logger.logError(error, `Failed to send event log to Discord for ${eventData.type} event`);
-        }
-    }
-
-    /**
-     * Handle a failed or partial Discord to Minecraft delivery
-     *
-     * Reports a bridging failure back to the Discord user who sent the message and
-     * records it in the metrics. Distinguishes a total failure (nothing was delivered)
-     * from a partial one (some guilds received the message, others did not) so the
-     * reaction reflects what actually happened.
-     *
-     * This method previously did not exist while being called from four places in this
-     * class. Every call threw a TypeError, and because one of those calls sits inside
-     * the catch block of handleDiscordMessage, the TypeError escaped the async function
-     * as an unhandled rejection - which main.js turns into process.exit(1). Any partial
-     * delivery failure therefore killed the whole bridge.
-     *
-     * @async
-     * @param {object} messageData - Discord message data being bridged
-     * @param {object} [messageData.messageRef] - Discord.js message object for reactions
-     * @param {object} messageData.author - Message author information
-     * @param {Error} error - The error that caused the failure
-     * @param {number} successCount - Number of guilds that received the message
-     * @param {number} totalGuilds - Number of guilds that should have received it
-     *
-     * @example
-     * await coordinator.handleBridgeError(messageData, error, 2, 3);
-     * // Adds a ⚠️ reaction: 2 of 3 guilds got the message
-     */
-    async handleBridgeError(messageData, error, successCount, totalGuilds) {
-        try {
-            const isPartial = successCount > 0 && successCount < totalGuilds;
-            const reason = isPartial ? 'partial_delivery' : 'delivery_failed';
-
-            metrics.dropped(
-                'discord_to_mc',
-                reason,
-                `${successCount}/${totalGuilds} guilds - ${error?.message || 'unknown error'}`
-            );
-
-            if (isPartial) {
-                logger.warn(
-                    `[DC→MC] Partial delivery: ${successCount}/${totalGuilds} guilds received the message ` +
-                    `from ${messageData?.author?.username || 'unknown'} - ${error?.message || 'unknown error'}`
-                );
-            } else {
-                logger.warn(
-                    `[DC→MC] Delivery failed for message from ${messageData?.author?.username || 'unknown'} ` +
-                    `- ${error?.message || 'unknown error'}`
-                );
-            }
-
-            // Give the sender visible feedback: ⚠️ when it partly went through,
-            // ❌ when nothing did
-            const reaction = isPartial ? '⚠️' : '❌';
-            const target = messageData?.messageRef || messageData?.message;
-
-            if (target && typeof target.react === 'function') {
-                await target.react(reaction);
-            }
-
-        } catch (reactionError) {
-            // Never let error reporting become a new source of failure - this method is
-            // called from inside catch blocks
-            logger.debug(`Failed to report bridge error to Discord: ${reactionError.message}`);
         }
     }
 

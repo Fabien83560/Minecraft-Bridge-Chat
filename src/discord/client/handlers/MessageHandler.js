@@ -246,6 +246,8 @@ class MessageHandler extends EventEmitter {
                 return; // Nothing to bridge after cleaning
             }
 
+            const replyTo = await this.resolveReplyTarget(message);
+
             // Create enhanced message data with message reference for error handling
             const messageData = this.processDiscordMessage({
                 messageRef: message, // Add reference to original message for reactions
@@ -267,7 +269,8 @@ class MessageHandler extends EventEmitter {
                     messageId: message.reference.messageId,
                     channelId: message.reference.channelId,
                     guildId: message.reference.guildId
-                } : null
+                } : null,
+                replyTo: replyTo
             });
 
             if (!messageData) {
@@ -346,13 +349,51 @@ class MessageHandler extends EventEmitter {
                 } : null,
                 attachments: messageObject.attachments || null,
                 embeds: messageObject.embeds || null,
-                reference: messageObject.reference || null
+                reference: messageObject.reference || null,
+                replyTo: messageObject.replyTo || null
             };
 
             return processedData;
 
         } catch (error) {
             logger.logError(error, 'Error processing Discord message');
+            return null;
+        }
+    }
+
+    /**
+     * Resolve the target of a Discord reply
+     * 
+     * Fetches the replied-to message and extracts the name as displayed in the channel:
+     * the server nickname for a member, the webhook name for a message bridged from
+     * Minecraft. Bracketed decorations ([377] level, [FL] guild tag) are stripped and
+     * the name is clamped to Minecraft username length so the bridged line stays within
+     * the server chat limit.
+     * 
+     * @async
+     * @private
+     * @param {Message} message - Discord.js message object
+     * @returns {Promise<object|null>} Reply target with username, or null if not a reply
+     */
+    async resolveReplyTarget(message) {
+        if (!message.reference?.messageId) return null;
+
+        try {
+            const cached = message.channel.messages.cache.get(message.reference.messageId);
+            const referenced = cached || await message.fetchReference();
+
+            const displayName = referenced.member?.displayName || referenced.author?.username;
+            if (!displayName) return null;
+
+            const username = displayName.replace(/^\[[^\]]+\]\s*/, '').trim().substring(0, 16);
+            if (!username) return null;
+
+            logger.debug(`Resolved reply target to ${username}`);
+            return { username };
+
+        } catch (error) {
+            // Referenced message deleted or unfetchable - bridge the message without the reply prefix
+            logger.debug(`Could not resolve reply target: ${error.message}`);
             return null;
         }
     }

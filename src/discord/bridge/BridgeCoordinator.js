@@ -747,14 +747,19 @@ class BridgeCoordinator {
      * 
      * Formats a Discord message for display in Minecraft guild chat. Adds a
      * "D >" prefix to distinguish bridged messages from native Minecraft chat.
+     * Replies name the message author being answered, so players can tell an
+     * answer apart from a plain mention.
      * 
      * Format: `D > Username: message content`
+     * Reply:  `D > Username répond à Target: message content`
      * 
      * @param {object} messageData - Discord message data
      * @param {object} messageData.author - Message author
      * @param {string} messageData.author.displayName - Display name
      * @param {string} messageData.author.username - Username fallback
      * @param {string} messageData.content - Message content
+     * @param {object} [messageData.replyTo] - Reply target, absent when not a reply
+     * @param {string} messageData.replyTo.username - Name of the author being replied to
      * @param {string} chatType - Target chat type (currently not used in formatting)
      * @returns {string} Formatted message for Minecraft
      * 
@@ -772,8 +777,10 @@ class BridgeCoordinator {
         // Add Discord prefix to distinguish from native Minecraft messages
         const prefix = "D >";
         
+        const replyTo = messageData.replyTo ? ` répond à ${messageData.replyTo.username}` : '';
+        
         // Format: D > Username: message content
-        return `${prefix} ${username}: ${content}`;
+        return `${prefix} ${username}${replyTo}: ${content}`;
     }
 
     /**

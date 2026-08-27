@@ -42,6 +42,7 @@
 // Specific Imports
 const logger = require("../../shared/logger");
 const metrics = require("../../shared/BridgeMetrics.js");
+const { sanitizeForMinecraft } = require("../../shared/sanitizeForMinecraft.js");
 
 /**
  * ChatQueue - Serialize outbound chat for one bot account
@@ -112,7 +113,10 @@ class ChatQueue {
      * connection lost, queue stopped) so callers can report a real failure instead of
      * logging an unconditional success.
      *
-     * @param {string} text - Full text to send, including any leading command
+     * @param {string} text - Full text to send, including any leading command.
+     *        Les caractères de formatage invisibles (sélecteurs de variation,
+     *        liants de largeur nulle) en sont retirés : Minecraft les rend en
+     *        carrés alors qu'ils sont invisibles côté Discord.
      * @param {object} [options={}] - Per-message options
      * @param {string} [options.priority='chat'] - Lane to use ('command' or 'chat')
      * @param {string} [options.direction='inter_guild'] - Metrics direction for accounting
@@ -127,6 +131,11 @@ class ChatQueue {
      * });
      */
     enqueue(text, options = {}) {
+        // Nettoyage au point d'entrée, et pas plus bas : la déduplication, le
+        // clamp de longueur et les métriques doivent tous voir le même texte
+        // que celui réellement écrit sur le serveur.
+        text = sanitizeForMinecraft(text);
+
         const priority = options.priority === 'command' ? 'command' : 'chat';
         const direction = options.direction || 'inter_guild';
         const label = options.label || '';

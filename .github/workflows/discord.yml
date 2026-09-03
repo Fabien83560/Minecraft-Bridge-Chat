@@ -1,4 +1,4 @@
-name: Discord Test (Timo)
+name: Discord
 
 on:
   push:
@@ -134,11 +134,32 @@ jobs:
       - name: Send to Discord
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          # Salon forum : ID du post dans lequel publier. Vide = salon texte classique.
+          DISCORD_THREAD_ID: ${{ secrets.DISCORD_THREAD_ID }}
           JSON_PAYLOAD: ${{ steps.build_payload.outputs.json_payload }}
         run: |
-          if [ -n "$DISCORD_WEBHOOK" ]; then
-            curl -H "Content-Type: application/json" \
+          # Poste le payload sur un webhook Discord.
+          # $1 = URL du webhook, $2 = ID du post (thread) pour un salon forum.
+          send_to_discord() {
+            url="$1"
+            thread_id="$2"
+            [ -n "$url" ] || return 0
+
+            # Un webhook attaché à un salon de type forum ne peut pas publier
+            # « à la racine » du salon : il faut viser un post existant via
+            # ?thread_id=... (sinon Discord répond 400).
+            if [ -n "$thread_id" ]; then
+              case "$url" in
+                *\?*) url="$url&thread_id=$thread_id" ;;
+                *)    url="$url?thread_id=$thread_id" ;;
+              esac
+            fi
+
+            curl -sS --fail-with-body \
+                 -H "Content-Type: application/json" \
                  -X POST \
                  -d "$JSON_PAYLOAD" \
-                 "$DISCORD_WEBHOOK"
-          fi
+                 "$url"
+          }
+
+          send_to_discord "$DISCORD_WEBHOOK" "$DISCORD_THREAD_ID"
